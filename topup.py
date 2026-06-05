@@ -1351,15 +1351,9 @@ async def format_and_copy_text(message: types.Message):
     
     try:
         from aiogram.types import CopyTextButton
-        copy_btn = InlineKeyboardButton(
-            text="ᴄᴏᴘʏ", 
-            copy_text=CopyTextButton(text=formatted_raw)
-        )
+        copy_btn = InlineKeyboardButton(text="{loading_icon}ᴄᴏᴘʏ", copy_text=CopyTextButton(text=formatted_raw), style="primary")
     except ImportError:
-        copy_btn = InlineKeyboardButton(
-            text="ᴄᴏᴘʏ", 
-            switch_inline_query=formatted_raw
-        )
+        copy_btn = InlineKeyboardButton(text="{loading_icon}ᴄᴏᴘʏ", switch_inline_query=formatted_raw, style="primary")
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[copy_btn]])
     await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
