@@ -1316,7 +1316,7 @@ async def clone_bot_command(message: types.Message):
     match = re.search(r"(?i)^\.clone\s+(\S+)", message.text)
     token = match.group(1).strip()
     
-    loading = await message.reply("⏳ Cloning Bot... Please wait.")
+    loading = await message.reply("Cloning Bot... Please wait.")
     
     try:
         new_bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -1327,13 +1327,33 @@ async def clone_bot_command(message: types.Message):
         asyncio.create_task(start_cloned_bot_polling(new_bot))
         
         await loading.edit_text(
-            f"✅ <b>Bot Cloned Successfully!</b>\n\n"
-            f"🤖 <b>Bot:</b> @{bot_info.username}\n"
-            f"🆔 <b>Bot ID:</b> <code>{bot_info.id}</code>\n\n"
-            f"<i>မှတ်ချက်: Clone Bot အတွက် Cookie ကို ၎င်း Bot ဆီသို့သွား၍ /setcookie ဖြင့် သီးသန့်ထည့်သွင်းပေးပါ။</i>"
+            f"✅ <b>ʙᴏᴛ ᴄʟᴏɴᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ</b>\n"
+            f"🤖 <b>ᴜꜱᴇʀɴᴀᴍᴇ:</b> @{bot_info.username}\n"
+            f"🆔 <b>ʙᴏᴛ ɪᴅ:</b> <code>{bot_info.id}</code>\n\n"
+            #f"<i>မှတ်ချက်: Clone Bot အတွက် Cookie ကို ၎င်း Bot ဆီသို့သွား၍ /setcookie ဖြင့် သီးသန့်ထည့်သွင်းပေးပါ။</i>"
         )
     except Exception as e:
         await loading.edit_text(f"❌ <b>Clone Failed:</b> Invalid Token or API Error.\n{str(e)}")
+
+@main_router.message(F.text.regexp(r"(?i)^\.delbot\s+([^:]+:[A-Za-z0-9_-]+)"))
+async def delete_bot_command(message: types.Message):
+    if message.from_user.id != OWNER_ID: 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    match = re.search(r"(?i)^\.delbot\s+(\S+)", message.text)
+    token = match.group(1).strip()
+    
+    deleted = await db.remove_cloned_bot(token)
+    
+    if deleted:
+        await message.reply(
+            "✅ <b>Bot Removed Successfully!</b>\n\n"
+            "မှတ်ချက်။ ။ Database ထဲမှ အောင်မြင်စွာ ဖျက်ပစ်လိုက်ပါပြီ။ လက်ရှိ Run နေသော Bot ကို အပြီးတိုင် ရပ်တန့်သွားစေရန် Render တွင် <b>Manual Restart / Redeploy</b> တစ်ကြိမ် လုပ်ပေးရန် လိုအပ်ပါသည်။",
+            parse_mode=ParseMode.HTML
+        )
+    else:
+        await message.reply("❌ <b>Error:</b> ထို Token ဖြင့် မှတ်သားထားသော Bot မရှိပါ။", parse_mode=ParseMode.HTML)
+
 
 
 @main_router.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+b\s*$"))
