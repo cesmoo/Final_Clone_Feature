@@ -21,6 +21,7 @@ try:
     resellers_col = db['resellers']
     settings_col = db['settings']
     orders_col = db['orders']
+    scammers_col = db['scammers']
     
     print("✅ Async MongoDB (Motor) ချိတ်ဆက်မှု အောင်မြင်ပါသည်။")
     
@@ -33,26 +34,29 @@ MMT = datetime.timezone(datetime.timedelta(hours=6, minutes=30))
 
 async def setup_indexes():
     try:
-        await resellers_col.create_index("tg_id", unique=True)
+        # ယခင် Index အဟောင်းရှိနေလျှင် ဖျက်ပစ်ရန်
+        try:
+            await resellers_col.drop_index("tg_id_1")
+        except: 
+            pass
+            
+        # Bot ID နှင့် User ID တွဲ၍ Unique Index အသစ်ဖန်တီးမည်
+        await resellers_col.create_index([("bot_id", 1), ("tg_id", 1)], unique=True)
         await orders_col.create_index([("tg_id", 1), ("timestamp", -1)])
     except Exception as e:
         print(f"⚠️ Index ဖန်တီးရာတွင် အမှားရှိပါသည်: {e}")
 
 
 async def init_owner(owner_id):
-    owner_str = str(owner_id)
-    existing_owner = await resellers_col.find_one({"tg_id": owner_str})
-    
-    if not existing_owner:
-        await resellers_col.insert_one({
-            "tg_id": owner_str,
-            "username": "Owner"
-        })
+    # Owner ကို Hardcode ဖြင့် is_authorized တွင် စစ်ဆေးမည်ဖြစ်၍ ဤနေရာတွင် လွတ်ထားနိုင်ပါသည်။
+    pass
+
 
 # ====== Bot Specific Cookie Methods ======
 async def get_bot_cookie(bot_id: int):
     doc = await settings_col.find_one({"bot_id": bot_id, "type": "cookie"})
     return doc.get("cookie", "") if doc else ""
+
 
 async def update_bot_cookie(bot_id: int, cookie_str: str):
     await settings_col.update_one(
@@ -60,6 +64,7 @@ async def update_bot_cookie(bot_id: int, cookie_str: str):
         {"$set": {"cookie": cookie_str}},
         upsert=True
     )
+
 
 # ====== Clone Bot Methods ======
 async def add_cloned_bot(token: str):
@@ -69,44 +74,55 @@ async def add_cloned_bot(token: str):
         upsert=True
     )
 
+
 async def get_all_cloned_bots():
     cursor = settings_col.find({"type": "cloned_bot"})
     return [doc["token"] async for doc in cursor]
 
+
 async def remove_cloned_bot(token: str):
-    """Database ထဲမှ Clone Bot Token အား ဖယ်ရှားရန်"""
     result = await settings_col.delete_one({"type": "cloned_bot", "token": token})
     return result.deleted_count > 0
 
 
-async def get_reseller(tg_id):
-    return await resellers_col.find_one({"tg_id": str(tg_id)})
+# ====== Authorized Users Methods ======
+async def get_reseller(bot_id: int, tg_id: str):
+    return await resellers_col.find_one({"bot_id": bot_id, "tg_id": str(tg_id)})
 
 
-async def get_all_resellers():
-    cursor = resellers_col.find({})
+async def get_all_resellers(bot_id: int):
+    cursor = resellers_col.find({"bot_id": bot_id})
     return await cursor.to_list(length=None)
 
 
-async def add_reseller(tg_id, username):
+async def add_reseller(bot_id: int, tg_id: str, username: str):
     tg_id_str = str(tg_id)
-    existing_user = await resellers_col.find_one({"tg_id": tg_id_str})
+    existing_user = await resellers_col.find_one({"bot_id": bot_id, "tg_id": tg_id_str})
     
     if not existing_user:
         await resellers_col.insert_one({
+            "bot_id": bot_id,
             "tg_id": tg_id_str,
             "username": username
         })
         return True
-        
     return False
 
 
-async def remove_reseller(tg_id):
-    result = await resellers_col.delete_one({"tg_id": str(tg_id)})
+async def remove_reseller(bot_id: int, tg_id: str):
+    result = await resellers_col.delete_one({"bot_id": bot_id, "tg_id": str(tg_id)})
     return result.deleted_count > 0
 
 
+async def set_vip_status(bot_id: int, tg_id: str, is_vip: bool):
+    result = await resellers_col.update_one(
+        {"bot_id": bot_id, "tg_id": str(tg_id)},
+        {"$set": {"is_vip": is_vip}}
+    )
+    return result.modified_count > 0
+
+
+# ====== Orders Methods ======
 async def save_order(tg_id, game_id, zone_id, item_name, price, order_id, status="success"):
     now = datetime.datetime.now(MMT)
     
@@ -136,14 +152,6 @@ async def get_user_history(tg_id, limit=50):
 async def clear_user_history(tg_id):
     result = await orders_col.delete_many({"tg_id": str(tg_id)})
     return result.deleted_count
-
-
-async def set_vip_status(tg_id, is_vip: bool):
-    result = await resellers_col.update_one(
-        {"tg_id": str(tg_id)},
-        {"$set": {"is_vip": is_vip}}
-    )
-    return result.modified_count > 0
 
 
 async def get_top_customers(limit=10):
@@ -181,6 +189,7 @@ async def get_today_orders_summary():
     return {"total_spent": 0.0, "total_orders": 0}
 
 
+# ====== Scammers Methods ======
 async def add_scammer(game_id: str):
     await db.scammers.update_one(
         {"game_id": game_id}, 
