@@ -1751,6 +1751,70 @@ async def check_cookie_status(message: types.Message):
         await loading_msg.edit_text(f"❌ Error checking cookie: {str(e)}")
 
 
+@main_router.message(or_f(Command("listb"), F.text.regexp(r"(?i)^\.listb$")))
+async def show_price_list_br(message: types.Message):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    response_text = f"🇧🇷 <b>𝘿𝙤𝙪𝙗𝙡𝙚 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(DOUBLE_DIAMOND_PACKAGES)}</code>\n\n🇧🇷 <b>𝘽𝙧 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(BR_PACKAGES)}</code>"
+    await message.reply(response_text, parse_mode=ParseMode.HTML)
+
+
+@main_router.message(or_f(Command("listp"), F.text.regexp(r"(?i)^\.listp$")))
+async def show_price_list_ph(message: types.Message):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    response_text = f"🇵🇭 <b>𝙋𝙝 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(PH_PACKAGES)}</code>"
+    await message.reply(response_text, parse_mode=ParseMode.HTML)
+
+
+@main_router.message(or_f(Command("listmb"), F.text.regexp(r"(?i)^\.listmb$")))
+async def show_price_list_mcc_br(message: types.Message):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    response_text = f"🇧🇷 <b>𝙈𝘾𝘾 𝙋𝘼𝘾𝙆𝘼𝙂𝙀𝙎</b>\n<code>{generate_list(MCC_PACKAGES)}</code>"
+    await message.reply(response_text, parse_mode=ParseMode.HTML)
+
+
+@main_router.message(or_f(Command("listmp"), F.text.regexp(r"(?i)^\.listmp$")))
+async def show_price_list_mcc_ph(message: types.Message):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    response_text = f"🇵🇭 <b>𝙋𝙝 𝙈𝘾𝘾 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(PH_MCC_PACKAGES)}</code>"
+    await message.reply(response_text, parse_mode=ParseMode.HTML)
+
+
+@main_router.message(F.text.regexp(r"^[\d\s\.\(\)]+[\+\-\*\/][\d\s\+\-\*\/\(\)\.]+$"))
+async def auto_calculator(message: types.Message):
+    try:
+        expr = message.text.strip()
+        # ဖုန်းနံပါတ်များ (ဥပမာ 09...) ကို တွက်ချက်ခြင်းမှ ရှောင်ရှားရန်
+        if re.match(r"^09[-\s]?\d+", expr): 
+            return
+            
+        clean_expr = expr.replace(" ", "")
+        result = eval(clean_expr, {"__builtins__": None})
+        
+        if isinstance(result, float): 
+            formatted_result = f"{result:.4f}".rstrip('0').rstrip('.')
+        else: 
+            formatted_result = str(result)
+            
+        await message.reply(f"{expr} = {formatted_result}")
+    except Exception: 
+        pass
+
+
+
+
+
 @main_router.message(F.text.contains("PHPSESSID") & F.text.contains("cf_clearance"))
 async def handle_smart_cookie_update(message: types.Message):
     global GLOBAL_SCRAPERS, GLOBAL_CSRF
