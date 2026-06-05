@@ -1346,8 +1346,8 @@ async def format_and_copy_text(message: types.Message):
             formatted_raw = f"{prefix}{player_id} ({zone_id}) {processed_suffix}"
         else:
             formatted_raw = f"{player_id} ({zone_id})"
-            
-    formatted_text = f"{loading_icon}<code>{formatted_raw}</code>"
+    premium_emoji = "<tg-emoji emoji-id='5895403643863043222'>🫧</tg-emoji>"        
+    formatted_text = f"{premium_emoji} <code>{formatted_raw}</code>"
     
     try:
         from aiogram.types import CopyTextButton
