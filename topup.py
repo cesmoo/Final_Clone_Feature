@@ -1038,7 +1038,7 @@ async def execute_buy_process(bot_id, message, lines, regex_pattern, currency, p
             flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>" if currency == 'BR' else f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
             
             error_msg = (
-                f"✖ <b>ɪηꜱᴜꜰꜰɪᴄɪᴇηᴛ ʙᴀʟᴀɴᴄᴇ</b>\n\n"
+                f"✖ <b>ɪηꜱᴜꜰꜰɪᴄɪᴇηᴛ ʙᴧʟᴧηᴄᴇ</b>\n\n"
                 f"{flag} <b><code>ᴄᴏꜱᴛ : {total_required_amount:,.2f} 🪙</code></b>\n"
                 f"{flag} <b><code>ɴᴇᴇᴅ : {needed_amount:,.2f} 🪙</code></b>\n"
                 f"<code>━━━━━━━━━━━━━━━━━━</code>"
