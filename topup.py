@@ -1352,7 +1352,6 @@ async def format_and_copy_text(message: types.Message):
     premium_emoji = "<tg-emoji emoji-id='5895403643863043222'>🫧</tg-emoji>" 
     formatted_text = f"{premium_emoji} <code>{formatted_raw}</code>"
     
-    # 🌟 Copy Button တွင် Premium Emoji နှင့် အပြာရောင် Style (primary) ထည့်သွင်းခြင်း
     try:
         from aiogram.types import CopyTextButton
         copy_btn = InlineKeyboardButton(
@@ -1369,22 +1368,19 @@ async def format_and_copy_text(message: types.Message):
             style="primary"
         )
 
-    # 🌟 Confirm Button တွင် Premium Emoji နှင့် အစိမ်းရောင် Style (success) ထည့်သွင်းခြင်း
     confirm_btn = InlineKeyboardButton(
         text="ᴄᴏɴғɪʀᴍ", 
         callback_data="CONFIRM_ORDER",
-        icon_custom_emoji_id="6300954126901577963", # Confirm အတွက် Emoji ID
+        icon_custom_emoji_id="6300954126901577963", 
         style="success"
     )
 
-    # Button နှစ်ခုကို ဘေးတိုက် ယှဉ်ပြမည်
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[confirm_btn, copy_btn]])
     await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
 
 @main_router.callback_query(F.data == "CONFIRM_ORDER")
 async def process_confirm_order(call: types.CallbackQuery):
-    # 🌟 Button ပေါ်ရှိ Loading လည်နေခြင်းကို ချက်ချင်းရပ်တန့်စေမည် 🌟
     await call.answer()
     
     bot_id = call.bot.id
@@ -1400,7 +1396,6 @@ async def process_confirm_order(call: types.CallbackQuery):
         
     order_text = html.unescape(match.group(1).strip())
     
-    # Message အား ဖျက်ပစ်မည်
     try:
         await call.message.delete()
     except Exception:
@@ -1409,7 +1404,6 @@ async def process_confirm_order(call: types.CallbackQuery):
     if not original_msg:
         return await call.message.answer("❌ မူရင်း Message ကို ရှာမတွေ့ပါ။ Manual Copy ကူး၍ ဝယ်ယူပါ။")
 
-    # Order Text ကို စစ်ဆေး၍ သက်ဆိုင်ရာ Region သို့ Auto ပို့ပေးမည်
     lines = [line.strip() for line in order_text.strip().split('\n') if line.strip()]
     lower_order = order_text.lower()
     
@@ -1827,17 +1821,21 @@ async def check_cookie_status(message: types.Message):
         await loading_msg.edit_text(f"❌ Error checking cookie: {str(e)}")
 
 def generate_list(packages_dict):
-    """Dictionary ထဲမှ Package များနှင့် ဈေးနှုန်းများကို စာရင်းထုတ်ပေးရန်"""
+    """Dictionary ထဲမှ Package များနှင့် ဈေးနှုန်းများကို သပ်ရပ်စွာ စာရင်းထုတ်ပေးရန်"""
     text = ""
     for key, items in packages_dict.items():
-        # Package အတွင်းရှိ Item များ၏ စုစုပေါင်းဈေးနှုန်းကို တွက်မည်
         total_price = sum(item['price'] for item in items)
         
-        # ဈေးနှုန်းကို သုညအပိုများဖြတ်၍ လှပအောင် Format ချမည်
-        price_str = f"{total_price:g}" 
+        price_str = f"{total_price:.1f}" if (total_price * 10) % 10 == 0 else f"{total_price:g}"
         
-        text += f"▪️ {key.upper()} 💎  =>  {price_str} 🪙\n"
+        if key.isdigit():
+            display_name = f"{key} Diamond"
+        else:
+            display_name = key.upper()
+
+        text += f"{display_name:<16} - $ {price_str}\n"
     return text.strip()
+
 
 
 @main_router.message(or_f(Command("listb"), F.text.regexp(r"(?i)^\.listb$")))
@@ -1846,7 +1844,14 @@ async def show_price_list_br(message: types.Message):
     if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
-    response_text = f"🇧🇷 <b>𝘿𝙤𝙪𝙗𝙡𝙚 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(DOUBLE_DIAMOND_PACKAGES)}</code>\n\n🇧🇷 <b>𝘽𝙧 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(BR_PACKAGES)}</code>"
+    response_text = (
+        "<b>ʙʀᴀᴢɪʟ ᴅɪᴀᴍᴏɴᴅ ᴘᴀᴄᴋᴀɢᴇ</b>\n"
+        "━━━━━━━━━━━━\n"
+        f"<code>{generate_list(BR_PACKAGES)}</code>\n\n"
+        "<b>ᴅᴏᴜʙʟᴇ ᴅɪᴀᴍᴏɴᴅ ᴘᴀᴄᴋᴀɢᴇ</b>\n"
+        "━━━━━━━━━━━━\n"
+        f"<code>{generate_list(DOUBLE_DIAMOND_PACKAGES)}</code>"
+    )
     await message.reply(response_text, parse_mode=ParseMode.HTML)
 
 
@@ -1856,7 +1861,11 @@ async def show_price_list_ph(message: types.Message):
     if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
-    response_text = f"🇵🇭 <b>𝙋𝙝 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(PH_PACKAGES)}</code>"
+    response_text = (
+        "<b>ᴘʜɪʟɪᴘᴘɪɴᴇꜱ ᴅɪᴀᴍᴏɴᴅ ᴘᴀᴄᴋᴀɢᴇ</b>\n"
+        "━━━━━━━━━━━━━━\n"
+        f"<code>{generate_list(PH_PACKAGES)}</code>"
+    )
     await message.reply(response_text, parse_mode=ParseMode.HTML)
 
 
@@ -1866,7 +1875,11 @@ async def show_price_list_mcc_br(message: types.Message):
     if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
-    response_text = f"🇧🇷 <b>𝙈𝘾𝘾 𝙋𝘼𝘾𝙆𝘼𝙂𝙀𝙎</b>\n<code>{generate_list(MCC_PACKAGES)}</code>"
+    response_text = (
+        "<b>ʙʀᴀᴢɪʟ ᴍᴄᴄ ᴘᴀᴄᴋᴀɢᴇ</b>\n"
+        "━━━━━━━━━━\n"
+        f"<code>{generate_list(MCC_PACKAGES)}</code>"
+    )
     await message.reply(response_text, parse_mode=ParseMode.HTML)
 
 
@@ -1876,8 +1889,13 @@ async def show_price_list_mcc_ph(message: types.Message):
     if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
-    response_text = f"🇵🇭 <b>𝙋𝙝 𝙈𝘾𝘾 𝙋𝙖𝙘𝙠𝙖𝙜𝙚𝙨</b>\n<code>{generate_list(PH_MCC_PACKAGES)}</code>"
+    response_text = (
+        "<b>ᴘʜɪʟɪᴘᴘɪɴᴇꜱ ᴍᴄᴄ ᴘᴀᴄᴋᴀɢᴇ</b>\n"
+        "━━━━━━━━━━━━\n"
+        f"<code>{generate_list(PH_MCC_PACKAGES)}</code>"
+    )
     await message.reply(response_text, parse_mode=ParseMode.HTML)
+
 
 
 @main_router.message(F.text.regexp(r"^[\d\s\.\(\)]+[\+\-\*\/][\d\s\+\-\*\/\(\)\.]+$"))
