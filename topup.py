@@ -1382,7 +1382,6 @@ async def format_and_copy_text(message: types.Message):
     await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
 
-==========================================
 # 🌟 CONFIRM ခလုတ်ကို နှိပ်လျှင် အလုပ်လုပ်မည့် Handler အသစ်
 # ==========================================
 @main_router.callback_query(F.data == "CONFIRM_ORDER")
