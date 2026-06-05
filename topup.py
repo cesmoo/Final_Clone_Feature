@@ -196,12 +196,11 @@ PH_MCC_PACKAGES = {
 # ==========================================
 # 3. Helpers Functions
 # ==========================================
-async def is_authorized(user_id: int):
+async def is_authorized(bot_id: int, user_id: int):
     if user_id == OWNER_ID:
         return True
         
-    user = await db.get_reseller(str(user_id))
-    
+    user = await db.get_reseller(bot_id, str(user_id))
     if user is not None:
         return True
         
@@ -247,7 +246,6 @@ async def get_bot_scraper(bot_id: int):
         GLOBAL_CSRF[bot_id] = {'mlbb_br': None, 'mlbb_ph': None, 'mcc_br': None, 'mcc_ph': None}
         
     return GLOBAL_SCRAPERS[bot_id]
-
 
 def _sync_drission_login(email, password):
     try:
@@ -295,7 +293,6 @@ def _sync_drission_login(email, password):
             pass
         return None
 
-
 async def auto_login_and_get_cookie(bot_id: int):
     global last_login_time, GLOBAL_SCRAPERS, GLOBAL_CSRF
     
@@ -322,7 +319,6 @@ async def auto_login_and_get_cookie(bot_id: int):
         else:
             print("❌ Did not reach the Order page. (Google blocked or Checkpoint)")
             return False
-
 
 async def get_smile_balance(scraper, headers, balance_url='https://www.smile.one/customer/order'):
     balances = {'br_balance': 0.00, 'ph_balance': 0.00}
@@ -356,7 +352,6 @@ async def get_smile_balance(scraper, headers, balance_url='https://www.smile.one
         print(f"Error fetching balance from site: {e}")
         
     return balances
-
 
 async def process_smile_one_order_br(bot_id, game_id, zone_id, product_id, currency_name="BR", prev_context=None, skip_role_check=False, known_ig_name="Unknown", last_success_order_id=""):
     scraper = await get_bot_scraper(bot_id)
@@ -528,7 +523,6 @@ async def process_smile_one_order_br(bot_id, game_id, zone_id, product_id, curre
     except Exception as e: 
         return {"status": "error", "message": f"System Error: {str(e)}", "ig_name": known_ig_name}
 
-
 async def process_smile_one_order_ph(bot_id, game_id, zone_id, product_id, currency_name="PH", prev_context=None, skip_role_check=False, known_ig_name="Unknown", last_success_order_id=""):
     scraper = await get_bot_scraper(bot_id)
     global GLOBAL_CSRF
@@ -698,7 +692,6 @@ async def process_smile_one_order_ph(bot_id, game_id, zone_id, product_id, curre
 
     except Exception as e: 
         return {"status": "error", "message": f"System Error: {str(e)}", "ig_name": known_ig_name}
-
 
 async def process_mcc_order(bot_id, game_id, zone_id, product_id, currency_name, prev_context=None, skip_role_check=False, known_ig_name="Unknown", last_success_order_id=""):
     scraper = await get_bot_scraper(bot_id)
@@ -926,7 +919,6 @@ async def process_mcc_order(bot_id, game_id, zone_id, product_id, currency_name,
     except Exception as e: 
         return {"status": "error", "message": f"System Error: {str(e)}", "ig_name": known_ig_name}
 
-
 # ==========================================
 # 5. Message Handlers
 # ==========================================
@@ -1038,7 +1030,7 @@ async def execute_buy_process(bot_id, message, lines, regex_pattern, currency, p
             flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>" if currency == 'BR' else f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
             
             error_msg = (
-                f"✖ <b>ɪηꜱᴜꜰꜰɪᴄɪᴇηᴛ ʙᴧʟᴧηᴄᴇ</b>\n\n"
+                f"✖ <b>ɪηꜱᴜꜰꜰɪᴄɪᴇηᴛ ʙᴀʟᴀɴᴄᴇ</b>\n\n"
                 f"{flag} <b><code>ᴄᴏꜱᴛ : {total_required_amount:,.2f} 🪙</code></b>\n"
                 f"{flag} <b><code>ɴᴇᴇᴅ : {needed_amount:,.2f} 🪙</code></b>\n"
                 f"<code>━━━━━━━━━━━━━━━━━━</code>"
@@ -1308,6 +1300,71 @@ async def execute_buy_process(bot_id, message, lines, regex_pattern, currency, p
             )
 
 
+@main_router.message(or_f(F.text.regexp(r"^\d{7,}(?:\s+\(?\d+\)?)?\s*.*$"), F.caption.regexp(r"^\d{7,}(?:\s+\(?\d+\)?)?\s*.*$")))
+async def format_and_copy_text(message: types.Message):
+    raw_text = (message.text or message.caption).strip()
+    
+    player_id = ""
+    zone_id = ""
+    suffix = ""
+    formatted_raw = raw_text
+    
+    match_no_bracket = re.match(r"^(\d{7,})\s+(\d+)\s*(.*)$", raw_text)
+    match_bracket = re.match(r"^(\d{7,})\s*\((\d+)\)\s*(.*)$", raw_text)
+    
+    if match_bracket:
+        player_id, zone_id, suffix = match_bracket.groups()
+    elif match_no_bracket:
+        player_id, zone_id, suffix = match_no_bracket.groups()
+    
+    if player_id and zone_id:
+        suffix = suffix.strip()
+        processed_suffix = ""
+        prefix = ""
+        
+        if suffix:
+            clean_suffix = suffix.lower().replace(" ", "")
+            wp_match = re.match(r"^(\d*)wp(\d*)$", clean_suffix)
+            if wp_match:
+                num_str = wp_match.group(1) + wp_match.group(2)
+                processed_suffix = "wp" if num_str in ["", "1"] else f"wp{num_str}"
+            else: 
+                processed_suffix = suffix
+                
+            first_item = processed_suffix.split()[0].lower()
+            
+            if first_item in BR_PACKAGES or first_item in DOUBLE_DIAMOND_PACKAGES:
+                prefix = "b "
+            elif first_item in PH_PACKAGES:
+                prefix = "p "
+            elif first_item in MCC_PACKAGES:
+                prefix = "mcc "
+            elif first_item in PH_MCC_PACKAGES:
+                prefix = "mcp "
+
+        if processed_suffix:
+            formatted_raw = f"{prefix}{player_id} ({zone_id}) {processed_suffix}"
+        else:
+            formatted_raw = f"{player_id} ({zone_id})"
+            
+    formatted_text = f"<code>{formatted_raw}</code>"
+    
+    try:
+        from aiogram.types import CopyTextButton
+        copy_btn = InlineKeyboardButton(
+            text="ᴄᴏᴘʏ", 
+            copy_text=CopyTextButton(text=formatted_raw)
+        )
+    except ImportError:
+        copy_btn = InlineKeyboardButton(
+            text="ᴄᴏᴘʏ", 
+            switch_inline_query=formatted_raw
+        )
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[copy_btn]])
+    await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+
 @main_router.message(F.text.regexp(r"(?i)^\.clone\s+([^:]+:[A-Za-z0-9_-]+)"))
 async def clone_bot_command(message: types.Message):
     if message.from_user.id != OWNER_ID: 
@@ -1316,7 +1373,7 @@ async def clone_bot_command(message: types.Message):
     match = re.search(r"(?i)^\.clone\s+(\S+)", message.text)
     token = match.group(1).strip()
     
-    loading = await message.reply("Cloning Bot... Please wait.")
+    loading = await message.reply("⏳ Cloning Bot... Please wait.")
     
     try:
         new_bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -1327,13 +1384,14 @@ async def clone_bot_command(message: types.Message):
         asyncio.create_task(start_cloned_bot_polling(new_bot))
         
         await loading.edit_text(
-            f"✅ <b>ʙᴏᴛ ᴄʟᴏɴᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ</b>\n"
-            f"🤖 <b>ᴜꜱᴇʀɴᴀᴍᴇ:</b> @{bot_info.username}\n"
-            f"🆔 <b>ʙᴏᴛ ɪᴅ:</b> <code>{bot_info.id}</code>\n\n"
-            #f"<i>မှတ်ချက်: Clone Bot အတွက် Cookie ကို ၎င်း Bot ဆီသို့သွား၍ /setcookie ဖြင့် သီးသန့်ထည့်သွင်းပေးပါ။</i>"
+            f"✅ <b>Bot Cloned Successfully!</b>\n\n"
+            f"🤖 <b>Bot:</b> @{bot_info.username}\n"
+            f"🆔 <b>Bot ID:</b> <code>{bot_info.id}</code>\n\n"
+            f"<i>မှတ်ချက်: Clone Bot အတွက် Cookie ကို ၎င်း Bot ဆီသို့သွား၍ /setcookie ဖြင့် သီးသန့်ထည့်သွင်းပေးပါ။</i>"
         )
     except Exception as e:
         await loading.edit_text(f"❌ <b>Clone Failed:</b> Invalid Token or API Error.\n{str(e)}")
+
 
 @main_router.message(F.text.regexp(r"(?i)^\.delbot\s+([^:]+:[A-Za-z0-9_-]+)"))
 async def delete_bot_command(message: types.Message):
@@ -1355,16 +1413,15 @@ async def delete_bot_command(message: types.Message):
         await message.reply("❌ <b>Error:</b> ထို Token ဖြင့် မှတ်သားထားသော Bot မရှိပါ။", parse_mode=ParseMode.HTML)
 
 
-
 @main_router.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+b\s*$"))
 async def handle_topup_br(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
     match = re.search(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+b\s*$", message.text.strip())
     activation_code = match.group(1).strip()
     tg_id = str(message.from_user.id)
-    bot_id = message.bot.id
     
     loading_msg = await message.reply(f"Checking Code `{activation_code}` for Region `BR`...")
     
@@ -1480,13 +1537,13 @@ async def handle_topup_br(message: types.Message):
 
 @main_router.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+p\s*$"))
 async def handle_topup_ph(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
     match = re.search(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+p\s*$", message.text.strip())
     activation_code = match.group(1).strip()
     tg_id = str(message.from_user.id)
-    bot_id = message.bot.id
     
     loading_msg = await message.reply(f"Checking Code `{activation_code}` for Region `PH`...")
     
@@ -1613,10 +1670,11 @@ async def add_reseller(message: types.Message):
     if not target_id.isdigit(): 
         return await message.reply("Please enter the User ID in numbers only.")
         
-    if await db.add_reseller(target_id, f"User_{target_id}"): 
-        await message.reply(f"✅ User ID `{target_id}` has been authorized to use the bot.")
+    bot_id = message.bot.id
+    if await db.add_reseller(bot_id, target_id, f"User_{target_id}"): 
+        await message.reply(f"✅ User ID `{target_id}` ဟာ ဤ Bot အတွက် အသုံးပြုခွင့် ရရှိသွားပါပြီ။")
     else: 
-        await message.reply(f"User ID `{target_id}` is already in the list.")
+        await message.reply(f"User ID `{target_id}` ဟာ ဤ Bot တွင် အသုံးပြုခွင့် ရှိပြီးသား ဖြစ်ပါသည်။")
 
 
 @main_router.message(or_f(Command("remove"), F.text.regexp(r"(?i)^\.remove(?:$|\s+)")))
@@ -1632,10 +1690,11 @@ async def remove_reseller_handler(message: types.Message):
     if target_id == str(OWNER_ID): 
         return await message.reply("The Owner cannot be removed.")
         
-    if await db.remove_reseller(target_id): 
-        await message.reply(f"✅ User ID `{target_id}` has been removed.")
+    bot_id = message.bot.id
+    if await db.remove_reseller(bot_id, target_id): 
+        await message.reply(f"✅ User ID `{target_id}` အား ဤ Bot မှ ဖယ်ရှားလိုက်ပါပြီ။")
     else: 
-        await message.reply("That ID is not in the list.")
+        await message.reply("ထို ID သည် ဤ Bot ၏ စာရင်းထဲတွင် မရှိပါ။")
 
 
 @main_router.message(or_f(Command("users"), F.text.regexp(r"(?i)^\.users$")))
@@ -1643,15 +1702,16 @@ async def list_resellers(message: types.Message):
     if message.from_user.id != OWNER_ID: 
         return await message.reply("You are not the Owner.")
         
-    resellers_list = await db.get_all_resellers()
+    bot_id = message.bot.id
+    resellers_list = await db.get_all_resellers(bot_id)
     user_list = []
     
     for r in resellers_list:
         role = "owner" if r["tg_id"] == str(OWNER_ID) else "authorized"
         user_list.append(f"🟢 ID: <code>{r['tg_id']}</code> ({role})")
         
-    final_text = "\n".join(user_list) if user_list else "No users found."
-    await message.reply(f"🟢 **Authorized Users List:**\n\n{final_text}", parse_mode=ParseMode.HTML)
+    final_text = "\n".join(user_list) if user_list else "No users found in this bot."
+    await message.reply(f"🟢 **Authorized Users for this Bot:**\n\n{final_text}", parse_mode=ParseMode.HTML)
 
 
 @main_router.message(Command("setcookie"))
@@ -1739,11 +1799,11 @@ async def handle_smart_cookie_update(message: types.Message):
 
 @main_router.message(or_f(Command("balance"), F.text.regexp(r"(?i)^\.bal(?:$|\s+)")))
 async def check_balance_command(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
     
     loading_msg = await message.reply("Fetching real balance from the official account...")
-    bot_id = message.bot.id
     scraper = await get_bot_scraper(bot_id)
     headers = {
         'X-Requested-With': 'XMLHttpRequest', 
@@ -1769,7 +1829,8 @@ async def check_balance_command(message: types.Message):
 
 @main_router.message(F.text.regexp(r"(?i)^(?:msc|mlb|br|b)\s+\d+"))
 async def handle_br_mlbb(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply(f"ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.❌")
         
     try:
@@ -1785,7 +1846,6 @@ async def handle_br_mlbb(message: types.Message):
         if total_pkgs > 10: 
             return await message.reply("❌ 10 Limit Exceeded: တစ်ကြိမ်လျှင် အများဆုံး ၁၀ ခုသာ ဝယ်ယူနိုင်ပါသည်။")
             
-        bot_id = message.bot.id
         await execute_buy_process(bot_id, message, lines, regex, 'BR', [DOUBLE_DIAMOND_PACKAGES, BR_PACKAGES], process_smile_one_order_br, "MLBB")
     except Exception as e: 
         await message.reply(f"System Error: {str(e)}")
@@ -1793,7 +1853,8 @@ async def handle_br_mlbb(message: types.Message):
 
 @main_router.message(F.text.regexp(r"(?i)^(?:mlp|ph|p)\s+\d+"))
 async def handle_ph_mlbb(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply(f"ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.❌")
         
     try:
@@ -1809,7 +1870,6 @@ async def handle_ph_mlbb(message: types.Message):
         if total_pkgs > 10: 
             return await message.reply("❌ 10 Limit Exceeded: တစ်ကြိမ်လျှင် အများဆုံး ၁၀ ခုသာ ဝယ်ယူနိုင်ပါသည်။")
             
-        bot_id = message.bot.id
         await execute_buy_process(bot_id, message, lines, regex, 'PH', PH_PACKAGES, process_smile_one_order_ph, "MLBB")
     except Exception as e: 
         await message.reply(f"System Error: {str(e)}")
@@ -1817,7 +1877,8 @@ async def handle_ph_mlbb(message: types.Message):
 
 @main_router.message(F.text.regexp(r"(?i)^(?:mcc|mcb)\s+\d+"))
 async def handle_br_mcc(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply(f"ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.❌")
         
     try:
@@ -1833,7 +1894,6 @@ async def handle_br_mcc(message: types.Message):
         if total_pkgs > 5: 
             return await message.reply("❌ 5 Limit Exceeded: တစ်ကြိမ်လျှင် အများဆုံး ၅ ခုသာ ဝယ်ယူနိုင်ပါသည်။")
             
-        bot_id = message.bot.id
         await execute_buy_process(bot_id, message, lines, regex, 'BR', MCC_PACKAGES, process_mcc_order, "MCC", is_mcc=True)
     except Exception as e: 
         await message.reply(f"System Error: {str(e)}")
@@ -1841,7 +1901,8 @@ async def handle_br_mcc(message: types.Message):
 
 @main_router.message(F.text.regexp(r"(?i)^mcp\s+\d+"))
 async def handle_ph_mcc(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply(f"ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.❌")
         
     try:
@@ -1857,16 +1918,164 @@ async def handle_ph_mcc(message: types.Message):
         if total_pkgs > 5: 
             return await message.reply("❌ 5 Limit Exceeded: တစ်ကြိမ်လျှင် အများဆုံး ၅ ခုသာ ဝယ်ယူနိုင်ပါသည်။")
             
-        bot_id = message.bot.id
         await execute_buy_process(bot_id, message, lines, regex, 'PH', PH_MCC_PACKAGES, process_mcc_order, "MCC", is_mcc=True)
     except Exception as e: 
         await message.reply(f"System Error: {str(e)}")
 
 
+@main_router.message(or_f(Command("checkcus"), Command("cus"), F.text.regexp(r"(?i)^\.(?:checkcus|cus)(?:$|\s+)")))
+async def check_official_customer(message: types.Message):
+    bot_id = message.bot.id
+    user_id = message.from_user.id
+    
+    if not await is_authorized(bot_id, user_id):
+        return await message.reply("❌ You are not authorized.")
+        
+    parts = message.text.strip().split()
+    if len(parts) < 2:
+        return await message.reply("⚠️ <b>Usage:</b> <code>.cus <Game_ID></code>", parse_mode=ParseMode.HTML)
+        
+    search_query = parts[1]
+    loading_msg = await message.reply(f"Deep Searching Official Records for: <code>{search_query}</code>...", parse_mode=ParseMode.HTML)
+    
+    scraper = await get_bot_scraper(bot_id)
+    headers = {'X-Requested-With': 'XMLHttpRequest', 'Origin': 'https://www.smile.one'}
+    
+    urls_to_check = [
+        'https://www.smile.one/customer/activationcode/codelist', 
+        'https://www.smile.one/ph/customer/activationcode/codelist'
+    ]
+    
+    found_orders = []
+    seen_ids = set()
+    
+    try:
+        for api_url in urls_to_check:
+            for page_num in range(1, 11): 
+                res = await scraper.get(
+                    api_url, 
+                    params={'type': 'orderlist', 'p': str(page_num), 'pageSize': '50'}, 
+                    headers=headers, timeout=15
+                )
+                try:
+                    data = res.json()
+                    if 'list' in data and len(data['list']) > 0:
+                        for order in data['list']:
+                            current_user_id = str(order.get('user_id') or order.get('role_id') or '')
+                            order_id = str(order.get('increment_id') or order.get('id') or '')
+                            status_val = str(order.get('order_status', '') or order.get('status', '')).lower()
+                            
+                            if (current_user_id == search_query or order_id == search_query) and status_val in ['success', '1']:
+                                if order_id not in seen_ids:
+                                    seen_ids.add(order_id)
+                                    found_orders.append(order)
+                    else: 
+                        break 
+                except: 
+                    break
+                
+        if not found_orders: 
+            return await loading_msg.edit_text(f"❌ No successful records found for: <code>{search_query}</code>", parse_mode=ParseMode.HTML)
+            
+        found_orders = found_orders[:1] 
+        report = f"🎉<b>Oғғɪᴄɪᴀʟ Rᴇᴄᴏʀᴅs ғᴏʀ {search_query}</b>\n\n"
+        
+        for order in found_orders:
+            serial_id = str(order.get('increment_id') or order.get('id') or 'Unknown Serial')
+            date_str = str(order.get('created_at') or order.get('updated_at') or order.get('create_time') or '')
+            currency_sym = str(order.get('total_fee_currency') or '$')
+            
+            date_display = date_str
+            if date_str:
+                try:
+                    dt_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    mmt_dt = dt_obj + datetime.timedelta(hours=9, minutes=30)
+                    mm_time_str = mmt_dt.strftime("%I:%M:%S %p") 
+                    date_display = f"{date_str} ( MM - {mm_time_str} )"
+                except Exception:
+                    date_display = date_str
+
+            raw_item_name = str(order.get('product_name') or order.get('goods_name') or order.get('title') or 'Unknown Item')
+            raw_item_name = raw_item_name.replace("Mobile Legends BR - ", "").replace("Mobile Legends - ", "").strip()
+            
+            translations = {
+                "Passe Semanal de Diamante": "Weekly Diamond Pass",
+                "Passagem do crepúsculo": "Twilight Pass",
+                "Passe Crepúsculo": "Twilight Pass",
+                "Pacote Semanal Elite": "Elite Weekly Bundle",
+                "Pacote Mensal Épico": "Epic Monthly Bundle",
+                "Membro Estrela Plus": "Starlight Member Plus",
+                "Membro Estrela": "Starlight Member",
+                "Diamantes": "Diamonds",
+                "Diamante": "Diamond",
+                "Bônus": "Bonus",
+                "Pacote": "Bundle"
+            }
+            
+            for pt, en in translations.items():
+                if pt in raw_item_name:
+                    raw_item_name = raw_item_name.replace(pt, en)
+                    
+            if raw_item_name.endswith(" c") or raw_item_name.endswith(" ("):
+                raw_item_name = raw_item_name[:-2]
+                
+            raw_item_name = raw_item_name.strip()
+            final_item_name = f"{raw_item_name}"
+            
+            price = str(order.get('price') or order.get('grand_total') or order.get('real_money') or '0.00')
+            if currency_sym != '$':
+                price_display = f"{price} {currency_sym}"
+            else:
+                price_display = f"${price}"
+                
+            report += f"🏷 <code>{serial_id}</code>\n📅 <code>{date_display}</code>\n💎 {final_item_name} ({price_display})\n📊 Status: ✅ Success\n\n"
+            
+        await loading_msg.edit_text(report, parse_mode=ParseMode.HTML)
+    except Exception as e: 
+        await loading_msg.edit_text(f"❌ Search Error: {str(e)}", parse_mode=ParseMode.HTML)
+
+
+@main_router.message(or_f(Command("history"), F.text.regexp(r"(?i)^\.his$")))
+async def send_order_history(message: types.Message):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    tg_id = str(message.from_user.id)
+    user_name = message.from_user.username or message.from_user.first_name
+    history_data = await db.get_user_history(tg_id, limit=200)
+    
+    if not history_data: 
+        return await message.reply("📜 **No Order History Found.**")
+        
+    response_text = f"==== Order History for @{user_name} ====\n\n"
+    for order in history_data:
+        response_text += (f"🆔 Game ID: {order['game_id']}\n🌏 Zone ID: {order['zone_id']}\n💎 Pack: {order['item_name']}\n🆔 Order ID: {order['order_id']}\n📅 Date: {order['date_str']}\n💲 Rate: ${order['price']:,.2f}\n📊 Status: {order['status']}\n────────────────\n")
+        
+    file_bytes = response_text.encode('utf-8')
+    document = BufferedInputFile(file_bytes, filename=f"History_{tg_id}.txt")
+    await message.answer_document(document=document, caption=f"📜 **Order History**\n👤 User: @{user_name}\n📊 Records: {len(history_data)}")
+
+
+@main_router.message(or_f(Command("clean"), F.text.regexp(r"(?i)^\.clean$")))
+async def clean_order_history(message: types.Message):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
+    tg_id = str(message.from_user.id)
+    deleted_count = await db.clear_user_history(tg_id)
+    
+    if deleted_count > 0: 
+        await message.reply(f"🗑️ **History Cleaned Successfully.**\nDeleted {deleted_count} order records from your history.")
+    else: 
+        await message.reply("📜 **No Order History Found to Clean.**")
+
+
 @main_router.message(or_f(Command("region"), F.text.regexp(r"(?i)^\.region(?:$|\s+)")))
 async def handle_check_region(message: types.Message):
-
-    if not await is_authorized(message.from_user.id):
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id):
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
     
     match = re.search(r"(?i)^[./]?region\s+(\d+)\s*[\(]?\s*(\d+)\s*[\)]?", message.text.strip())
@@ -2004,8 +2213,10 @@ async def handle_check_region(message: types.Message):
 
 @main_router.message(or_f(Command("role"), F.text.regexp(r"(?i)^\.role(?:$|\s+)")))
 async def handle_check_role(message: types.Message):
-
-    if not await is_authorized(message.from_user.id): return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
+        return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+        
     match = re.search(r"(?i)^[./]?role\s+(\d+)\s*[\(]?\s*(\d+)\s*[\)]?", message.text.strip())
     if not match: return await message.reply("❌ Invalid format. Use: `.role 12345678 1234`")
     
@@ -2129,7 +2340,8 @@ async def toggle_maintenance(message: types.Message):
 
 @main_router.message(or_f(Command("scam"), F.text.regexp(r"(?i)^\.scam(?:$|\s+)")))
 async def add_scam_id(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
     parts = message.text.strip().split()
@@ -2147,7 +2359,8 @@ async def add_scam_id(message: types.Message):
 
 @main_router.message(or_f(Command("unscam"), F.text.regexp(r"(?i)^\.unscam(?:$|\s+)")))
 async def remove_scam_id(message: types.Message):
-    if not await is_authorized(message.from_user.id): 
+    bot_id = message.bot.id
+    if not await is_authorized(bot_id, message.from_user.id): 
         return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
     parts = message.text.strip().split()
@@ -2184,6 +2397,8 @@ async def send_help_message(message: types.Message):
         f"🔹 <code>.bal</code>      : Official Balance စစ်ရန်\n"
         f"🔹 <code>.his</code>      : မိမိဝယ်ယူခဲ့သော မှတ်တမ်းကြည့်ရန်\n"
         f"🔹 <code>.clean</code>    : မှတ်တမ်းများ ဖျက်ရန်\n"
+        f"🔹 <code>.region ID Zone</code> : Account & Region စစ်ရန်\n"
+        f"🔹 <code>.cus ID</code>     : Customer Official Record စစ်ရန်\n"
     )
     
     if is_owner:
@@ -2194,12 +2409,11 @@ async def send_help_message(message: types.Message):
             f"🔸 <code>.add ID</code>    : အသုံးပြုခွင့်ပေးရန်\n"
             f"🔸 <code>.remove ID</code> : အသုံးပြုခွင့်ပိတ်ရန်\n"
             f"🔸 <code>.users</code>     : User စာရင်းအားလုံး ကြည့်ရန်\n\n"
-            f"🔸 <code>.topcus</code>      : ငွေအများဆုံးသုံးထားသူများ ကြည့်ရန်\n"
-            f"🔸 <code>.setvip ID</code>   : VIP အဖြစ် သတ်မှတ်ရန်/ဖြုတ်ရန်\n\n"
             f"<b>⚙️ System Setup</b>\n"
             f"🔸 <code>.cookies</code>     : Cookie အခြေအနေ စစ်ဆေးရန်\n"
             f"🔸 <code>/setcookie</code>   : Main Cookie အသစ်ပြောင်းရန်\n"
             f"🔸 <code>.clone</code>       : Bot အသစ်ပွားရန် (.clone Token)\n"
+            f"🔸 <code>.delbot</code>      : ပွားထားသော Bot အားဖျက်ရန်\n"
         )
         
     help_text += f"</blockquote>"
@@ -2209,6 +2423,7 @@ async def send_help_message(message: types.Message):
 @main_router.message(Command("start"))
 async def send_welcome(message: types.Message):
     tg_id = str(message.from_user.id)
+    bot_id = message.bot.id
     full_name = "User"
     try:
         first_name = message.from_user.first_name or ""
@@ -2219,7 +2434,7 @@ async def send_welcome(message: types.Message):
         
         EMOJI_1, EMOJI_2, EMOJI_3, EMOJI_4, EMOJI_5 = "5956355397366320202", "5954097490109140119", "5958289678837746828", "5956330306167376831", "5954078884310814346"
 
-        status = "🟢 Aᴄᴛɪᴠᴇ" if await is_authorized(message.from_user.id) else "🔴 Nᴏᴛ Aᴄᴛɪᴠᴇ"
+        status = "🟢 Aᴄᴛɪᴠᴇ" if await is_authorized(bot_id, message.from_user.id) else "🔴 Nᴏᴛ Aᴄᴛɪᴠᴇ"
         
         welcome_text = (
             f"ʜᴇʏ ʙᴀʙʏ <tg-emoji emoji-id='{EMOJI_1}'>🥺</tg-emoji>\n\n"
@@ -2239,40 +2454,6 @@ async def send_welcome(message: types.Message):
             f"📞 {'Cᴏɴᴛᴀᴄᴛ ᴜs' :<11}: @iwillgoforwardsalone"
         )
         await message.reply(fallback_text, parse_mode=ParseMode.HTML)
-
-# ==========================================
-# 6. Middlewares & Scheduled Tasks
-# ==========================================
-class MaintenanceMiddleware(BaseMiddleware):
-    async def __call__(self, handler, event: types.Message, data: dict):
-        if IS_MAINTENANCE and event.from_user.id != OWNER_ID:
-            await event.reply("⚠️ ပြုပြင်ဆောင်ရွက်နေပါသဖြင့် Topup ဘော့အား ခနရပ်ထားပါသည်။")
-            return 
-        return await handler(event, data)
-
-
-class ScamAlertMiddleware(BaseMiddleware):
-    async def __call__(self, handler, event: types.Message, data: dict):
-        if event.text:
-            text_lower = event.text.lower()
-            if text_lower.startswith((".scam ", ".unscam ", "/scam", "/unscam")):
-                return await handler(event, data)
-                
-            for scam_id in GLOBAL_SCAMMERS:
-                if re.search(rf"\b{scam_id}\b", event.text):
-                    await event.reply("Scamer game id , Scamer Alert!", parse_mode=ParseMode.HTML)
-                    break 
-                    
-        return await handler(event, data)
-
-async def send_broadcast_greeting(text: str):
-    users = await db.get_all_resellers()
-    for u in users:
-        try:
-            await bot.send_message(chat_id=int(u['tg_id']), text=text, parse_mode=ParseMode.HTML)
-            await asyncio.sleep(0.1) 
-        except Exception: 
-            pass
 
 # ==========================================
 # 6. Middlewares, Scheduled Tasks & Global DP
@@ -2300,7 +2481,7 @@ class ScamAlertMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 async def send_broadcast_greeting(text: str):
-    users = await db.get_all_resellers()
+    users = await db.get_all_resellers(bot.id)
     for u in users:
         try:
             await bot.send_message(chat_id=int(u['tg_id']), text=text, parse_mode=ParseMode.HTML)
@@ -2308,7 +2489,6 @@ async def send_broadcast_greeting(text: str):
         except Exception: 
             pass
 
-# 🌟 Main Dispatcher ကို Global အနေဖြင့် ကြေညာခြင်း 🌟
 main_dp = Dispatcher()
 main_dp.include_router(main_router)
 main_dp.message.middleware(MaintenanceMiddleware())
@@ -2318,26 +2498,22 @@ main_dp.message.middleware(ScamAlertMiddleware())
 # 7. Main Execution Flow & Custom Polling
 # ==========================================
 async def start_cloned_bot_polling(clone_bot: Bot):
-    """ Clone Bot များအတွက် သီးသန့် Polling လုပ်ပေးမည့် Function """
     try:
         bot_info = await clone_bot.get_me()
         print(f"✅ Started custom polling for Cloned Bot: @{bot_info.username} (ID: {bot_info.id})")
         
-        # Webhook ချိတ်ထားခဲ့မိပါက ဖြုတ်မည်
         await clone_bot.delete_webhook(drop_pending_updates=True)
 
         offset = None
         while True:
             try:
-                # Update (Message) များကို Telegram Server မှ Manual ဆွဲယူမည်
                 updates = await clone_bot.get_updates(offset=offset, timeout=20)
                 for update in updates:
                     offset = update.update_id + 1
-                    # ရရှိလာသော Message ကို Global Dispatcher (main_dp) ထဲသို့ ထည့်ပေးမည်
                     asyncio.create_task(main_dp.feed_update(clone_bot, update))
             except Exception as e:
                 print(f"Polling error for {bot_info.username}: {e}")
-                await asyncio.sleep(5) # Error တက်ပါက ၅ စက္ကန့်နားပြီးမှ ပြန်စမည်
+                await asyncio.sleep(5) 
                 
     except Exception as e:
         print(f"❌ Could not start polling for cloned bot: {e}")
@@ -2360,7 +2536,6 @@ async def main():
     await db.setup_indexes()
     await db.init_owner(OWNER_ID)
 
-    # Database ထဲမှ Clone Token များအားလုံးကို ပြန်လည်အသက်သွင်းမည်
     cloned_tokens = await db.get_all_cloned_bots()
     for token in cloned_tokens:
         try:
@@ -2371,7 +2546,6 @@ async def main():
 
     print("Bot is successfully running on Aiogram 3 Framework... 🎉")
     
-    # Main Bot ကိုမူ ပုံမှန် Native Polling ဖြင့်သာ အလုပ်လုပ်စေမည်
     await main_dp.start_polling(bot)
 
 if __name__ == '__main__':
