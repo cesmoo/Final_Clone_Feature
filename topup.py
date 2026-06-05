@@ -1750,6 +1750,19 @@ async def check_cookie_status(message: types.Message):
     except Exception as e: 
         await loading_msg.edit_text(f"❌ Error checking cookie: {str(e)}")
 
+def generate_list(packages_dict):
+    """Dictionary ထဲမှ Package များနှင့် ဈေးနှုန်းများကို စာရင်းထုတ်ပေးရန်"""
+    text = ""
+    for key, items in packages_dict.items():
+        # Package အတွင်းရှိ Item များ၏ စုစုပေါင်းဈေးနှုန်းကို တွက်မည်
+        total_price = sum(item['price'] for item in items)
+        
+        # ဈေးနှုန်းကို သုညအပိုများဖြတ်၍ လှပအောင် Format ချမည်
+        price_str = f"{total_price:g}" 
+        
+        text += f"▪️ {key.upper()} 💎  =>  {price_str} 🪙\n"
+    return text.strip()
+
 
 @main_router.message(or_f(Command("listb"), F.text.regexp(r"(?i)^\.listb$")))
 async def show_price_list_br(message: types.Message):
