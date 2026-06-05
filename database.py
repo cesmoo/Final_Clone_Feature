@@ -73,6 +73,11 @@ async def get_all_cloned_bots():
     cursor = settings_col.find({"type": "cloned_bot"})
     return [doc["token"] async for doc in cursor]
 
+async def remove_cloned_bot(token: str):
+    """Database ထဲမှ Clone Bot Token အား ဖယ်ရှားရန်"""
+    result = await settings_col.delete_one({"type": "cloned_bot", "token": token})
+    return result.deleted_count > 0
+
 
 async def get_reseller(tg_id):
     return await resellers_col.find_one({"tg_id": str(tg_id)})
