@@ -2255,18 +2255,70 @@ async def send_broadcast_greeting(text: str):
             pass
 
 # ==========================================
-# 7. Main Execution Flow
+# 6. Middlewares, Scheduled Tasks & Global DP
+# ==========================================
+class MaintenanceMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: types.Message, data: dict):
+        if IS_MAINTENANCE and event.from_user.id != OWNER_ID:
+            await event.reply("⚠️ ပြုပြင်ဆောင်ရွက်နေပါသဖြင့် Topup ဘော့အား ခနရပ်ထားပါသည်။")
+            return 
+        return await handler(event, data)
+
+
+class ScamAlertMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: types.Message, data: dict):
+        if event.text:
+            text_lower = event.text.lower()
+            if text_lower.startswith((".scam ", ".unscam ", "/scam", "/unscam")):
+                return await handler(event, data)
+                
+            for scam_id in GLOBAL_SCAMMERS:
+                if re.search(rf"\b{scam_id}\b", event.text):
+                    await event.reply("Scamer game id , Scamer Alert!", parse_mode=ParseMode.HTML)
+                    break 
+                    
+        return await handler(event, data)
+
+async def send_broadcast_greeting(text: str):
+    users = await db.get_all_resellers()
+    for u in users:
+        try:
+            await bot.send_message(chat_id=int(u['tg_id']), text=text, parse_mode=ParseMode.HTML)
+            await asyncio.sleep(0.1) 
+        except Exception: 
+            pass
+
+# 🌟 Main Dispatcher ကို Global အနေဖြင့် ကြေညာခြင်း 🌟
+main_dp = Dispatcher()
+main_dp.include_router(main_router)
+main_dp.message.middleware(MaintenanceMiddleware())
+main_dp.message.middleware(ScamAlertMiddleware())
+
+# ==========================================
+# 7. Main Execution Flow & Custom Polling
 # ==========================================
 async def start_cloned_bot_polling(clone_bot: Bot):
-    clone_dp = Dispatcher()
-    clone_dp.include_router(main_router) 
-    clone_dp.message.middleware(MaintenanceMiddleware())
-    clone_dp.message.middleware(ScamAlertMiddleware())
-    
+    """ Clone Bot များအတွက် သီးသန့် Polling လုပ်ပေးမည့် Function """
     try:
         bot_info = await clone_bot.get_me()
-        print(f"✅ Started polling for Cloned Bot: @{bot_info.username} (ID: {bot_info.id})")
-        await clone_dp.start_polling(clone_bot)
+        print(f"✅ Started custom polling for Cloned Bot: @{bot_info.username} (ID: {bot_info.id})")
+        
+        # Webhook ချိတ်ထားခဲ့မိပါက ဖြုတ်မည်
+        await clone_bot.delete_webhook(drop_pending_updates=True)
+
+        offset = None
+        while True:
+            try:
+                # Update (Message) များကို Telegram Server မှ Manual ဆွဲယူမည်
+                updates = await clone_bot.get_updates(offset=offset, timeout=20)
+                for update in updates:
+                    offset = update.update_id + 1
+                    # ရရှိလာသော Message ကို Global Dispatcher (main_dp) ထဲသို့ ထည့်ပေးမည်
+                    asyncio.create_task(main_dp.feed_update(clone_bot, update))
+            except Exception as e:
+                print(f"Polling error for {bot_info.username}: {e}")
+                await asyncio.sleep(5) # Error တက်ပါက ၅ စက္ကန့်နားပြီးမှ ပြန်စမည်
+                
     except Exception as e:
         print(f"❌ Could not start polling for cloned bot: {e}")
 
@@ -2288,6 +2340,7 @@ async def main():
     await db.setup_indexes()
     await db.init_owner(OWNER_ID)
 
+    # Database ထဲမှ Clone Token များအားလုံးကို ပြန်လည်အသက်သွင်းမည်
     cloned_tokens = await db.get_all_cloned_bots()
     for token in cloned_tokens:
         try:
@@ -2296,12 +2349,9 @@ async def main():
         except Exception as e:
             print(f"❌ Failed to initialize cloned bot {token[:10]}... : {e}")
 
-    main_dp = Dispatcher()
-    main_dp.include_router(main_router)
-    main_dp.message.middleware(MaintenanceMiddleware())
-    main_dp.message.middleware(ScamAlertMiddleware())
-    
     print("Bot is successfully running on Aiogram 3 Framework... 🎉")
+    
+    # Main Bot ကိုမူ ပုံမှန် Native Polling ဖြင့်သာ အလုပ်လုပ်စေမည်
     await main_dp.start_polling(bot)
 
 if __name__ == '__main__':
