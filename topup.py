@@ -1323,17 +1323,24 @@ async def format_and_copy_text(message: types.Message):
         prefix = ""
         
         if suffix:
-            clean_suffix = suffix.lower().replace(" ", "")
-            wp_match = re.match(r"^(\d*)wp(\d*)$", clean_suffix)
-            if wp_match:
-                num_str = wp_match.group(1) + wp_match.group(2)
-                processed_suffix = "wp" if num_str in ["", "1"] else f"wp{num_str}"
-            else: 
-                processed_suffix = suffix
-                
-            # Item အလိုက် Region Prefix ကို Auto စစ်ဆေးမည်
-            first_item = processed_suffix.split()[0].lower()
+            raw_items = suffix.lower().split()
+            cleaned_items = []
             
+            for item in raw_items:
+                # WP အတွက် စစ်ဆေးခြင်း
+                wp_match = re.match(r"^(\d*)wp(\d*)$", item)
+                if wp_match:
+                    num_str = wp_match.group(1) + wp_match.group(2)
+                    cleaned_items.append("wp" if num_str in ["", "1"] else f"wp{num_str}")
+                else:
+                    # dia86, dm86, 86dia စသည်တို့ကို ဂဏန်းသီးသန့် 86 ဖြစ်အောင် ပြောင်းခြင်း
+                    clean_item = re.sub(r'^(?:dia|dm|d)?(\d+)(?:dia|dm|d)?$', r'\1', item)
+                    cleaned_items.append(clean_item)
+            
+            processed_suffix = " ".join(cleaned_items)
+            first_item = cleaned_items[0]
+            
+            # Item အလိုက် Region Prefix ကို Auto စစ်ဆေးမည်
             if first_item in BR_PACKAGES or first_item in DOUBLE_DIAMOND_PACKAGES:
                 prefix = "b "
             elif first_item in PH_PACKAGES:
@@ -1352,12 +1359,13 @@ async def format_and_copy_text(message: types.Message):
     premium_emoji = "<tg-emoji emoji-id='5895403643863043222'>🫧</tg-emoji>" 
     formatted_text = f"{premium_emoji} <code>{formatted_raw}</code>"
     
+    # 🌟 Copy Button တွင် Premium Emoji နှင့် အပြာရောင် Style (primary) ထည့်သွင်းခြင်း
     try:
         from aiogram.types import CopyTextButton
         copy_btn = InlineKeyboardButton(
             text="ᴄᴏᴘʏ", 
             copy_text=CopyTextButton(text=formatted_raw),
-            icon_custom_emoji_id="5956330306167376831", # Copy အတွက် Emoji ID 
+            icon_custom_emoji_id="6233018009250694942", 
             style="primary"
         )
     except ImportError:
@@ -1368,15 +1376,17 @@ async def format_and_copy_text(message: types.Message):
             style="primary"
         )
 
+    # 🌟 Confirm Button တွင် Premium Emoji နှင့် အစိမ်းရောင် Style (success) ထည့်သွင်းခြင်း
     confirm_btn = InlineKeyboardButton(
         text="ᴄᴏɴғɪʀᴍ", 
         callback_data="CONFIRM_ORDER",
-        icon_custom_emoji_id="6300954126901577963", 
+        icon_custom_emoji_id="6300954126901577963",
         style="success"
     )
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[confirm_btn, copy_btn]])
     await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
 
 
 @main_router.callback_query(F.data == "CONFIRM_ORDER")
