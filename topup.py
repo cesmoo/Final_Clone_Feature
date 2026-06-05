@@ -1331,6 +1331,7 @@ async def format_and_copy_text(message: types.Message):
             else: 
                 processed_suffix = suffix
                 
+            # Item အလိုက် Region Prefix ကို Auto စစ်ဆေးမည်
             first_item = processed_suffix.split()[0].lower()
             
             if first_item in BR_PACKAGES or first_item in DOUBLE_DIAMOND_PACKAGES:
@@ -1346,17 +1347,93 @@ async def format_and_copy_text(message: types.Message):
             formatted_raw = f"{prefix}{player_id} ({zone_id}) {processed_suffix}"
         else:
             formatted_raw = f"{player_id} ({zone_id})"
-    premium_emoji = "<tg-emoji emoji-id='5895403643863043222'>🫧</tg-emoji>"        
+            
+    # 🌟 Message စာသား၏ အရှေ့တွင် Premium Emoji ထည့်သွင်းခြင်း
+    premium_emoji = "<tg-emoji emoji-id='5895403643863043222'>🫧</tg-emoji>" 
     formatted_text = f"{premium_emoji} <code>{formatted_raw}</code>"
     
+    # 🌟 Copy Button တွင် Premium Emoji နှင့် အပြာရောင် Style (primary) ထည့်သွင်းခြင်း
     try:
         from aiogram.types import CopyTextButton
-        copy_btn = InlineKeyboardButton(text="ᴄᴏᴘʏ", copy_text=CopyTextButton(text=formatted_raw), style="primary")
+        copy_btn = InlineKeyboardButton(
+            text="ᴄᴏᴘʏ", 
+            copy_text=CopyTextButton(text=formatted_raw),
+            icon_custom_emoji_id="5956330306167376831", # Copy အတွက် Emoji ID 
+            style="primary"
+        )
     except ImportError:
-        copy_btn = InlineKeyboardButton(text="ᴄᴏᴘʏ", switch_inline_query=formatted_raw, style="primary")
+        copy_btn = InlineKeyboardButton(
+            text="ᴄᴏᴘʏ", 
+            switch_inline_query=formatted_raw,
+            icon_custom_emoji_id="6233018009250694942",
+            style="primary"
+        )
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[copy_btn]])
+    # 🌟 Confirm Button တွင် Premium Emoji နှင့် အစိမ်းရောင် Style (success) ထည့်သွင်းခြင်း
+    confirm_btn = InlineKeyboardButton(
+        text="ᴄᴏɴғɪʀᴍ", 
+        callback_data="CONFIRM_ORDER",
+        icon_custom_emoji_id="6300954126901577963", # Confirm အတွက် Emoji ID
+        style="success"
+    )
+
+    # Button နှစ်ခုကို ဘေးတိုက် ယှဉ်ပြမည်
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[confirm_btn, copy_btn]])
     await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+
+==========================================
+# 🌟 CONFIRM ခလုတ်ကို နှိပ်လျှင် အလုပ်လုပ်မည့် Handler အသစ်
+# ==========================================
+@main_router.callback_query(F.data == "CONFIRM_ORDER")
+async def process_confirm_order(call: types.CallbackQuery):
+    bot_id = call.bot.id
+    if not await is_authorized(bot_id, call.from_user.id):
+        return await call.answer("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.", show_alert=True)
+        
+    original_msg = call.message.reply_to_message
+    
+    # 1. <code> Tag ထဲမှ Formatted Text ကို တိကျစွာ ဆွဲထုတ်မည်
+    msg_html = call.message.html_text
+    match = re.search(r"<code>(.*?)</code>", msg_html)
+    if not match:
+        return await call.answer("❌ Could not extract order text.", show_alert=True)
+        
+    order_text = html.unescape(match.group(1).strip())
+    
+    # 2. Confirm နှိပ်ပြီးသည်နှင့် အဆိုပါ Message ကို ချက်ချင်း ဖျက်ပစ်မည်
+    try:
+        await call.message.delete()
+    except Exception:
+        pass
+        
+    if not original_msg:
+        return await call.answer("❌ မူရင်း Message ကို ရှာမတွေ့ပါ။ Manual Copy ကူး၍ ဝယ်ယူပါ။", show_alert=True)
+
+    # 3. Order Text ကို စစ်ဆေး၍ သက်ဆိုင်ရာ Region သို့ Auto ပို့ပေးမည်
+    lines = [line.strip() for line in order_text.strip().split('\n') if line.strip()]
+    lower_order = order_text.lower()
+    
+    if lower_order.startswith("mcc ") or lower_order.startswith("mcb ") or lower_order.startswith("mcgg "):
+        regex = r"(?i)^(?:(?:mcc|mcb|mcp|mcgg)\s+)?(\d+)\s*\(?\s*(\d+)\s*\)?\s*(.+)$"
+        await execute_buy_process(bot_id, original_msg, lines, regex, 'BR', MCC_PACKAGES, process_mcc_order, "MCC", is_mcc=True)
+        
+    elif lower_order.startswith("mcp "):
+        regex = r"(?i)^(?:mcp\s+)?(\d+)\s*\(?\s*(\d+)\s*\)?\s*(.+)$"
+        await execute_buy_process(bot_id, original_msg, lines, regex, 'PH', PH_MCC_PACKAGES, process_mcc_order, "MCC", is_mcc=True)
+        
+    elif lower_order.startswith("b ") or lower_order.startswith("br ") or lower_order.startswith("mlb ") or lower_order.startswith("msc "):
+        regex = r"(?i)^(?:(?:b|br|mlb|msc)\s+)?(\d+)\s*\(?\s*(\d+)\s*\)?\s*(.+)$"
+        await execute_buy_process(bot_id, original_msg, lines, regex, 'BR', [DOUBLE_DIAMOND_PACKAGES, BR_PACKAGES], process_smile_one_order_br, "MLBB")
+        
+    elif lower_order.startswith("p ") or lower_order.startswith("ph ") or lower_order.startswith("mlp "):
+        regex = r"(?i)^(?:(?:p|ph|mlp|mcp)\s+)?(\d+)\s*\(?\s*(\d+)\s*\)?\s*(.+)$"
+        await execute_buy_process(bot_id, original_msg, lines, regex, 'PH', PH_PACKAGES, process_smile_one_order_ph, "MLBB")
+        
+    else:
+        # Package မပါဘဲ ID/Zone သီးသန့် ရိုက်ထည့်ထားလျှင် (ဝယ်ယူ၍ မရနိုင်ပါ)
+        await call.answer("⚠️ Item Package မပါဝင်ပါ။", show_alert=True)
+
 
 
 @main_router.message(F.text.regexp(r"(?i)^\.clone\s+([^:]+:[A-Za-z0-9_-]+)"))
