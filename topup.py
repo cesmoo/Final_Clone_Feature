@@ -1030,7 +1030,7 @@ async def execute_buy_process(bot_id, message, lines, regex_pattern, currency, p
             flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>" if currency == 'BR' else f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
             
             error_msg = (
-                f"✖ <b>ɪηꜱᴜꜰꜰɪᴄɪᴇηᴛ ʙᴀʟᴀɴᴄᴇ</b>\n\n"
+                f"✖ <b>ɪηꜱᴜꜰꜰɪᴄɪᴇηᴛ ʙᴧʟᴧηᴄᴇ</b>\n\n"
                 f"{flag} <b><code>ᴄᴏꜱᴛ : {total_required_amount:,.2f} 🪙</code></b>\n"
                 f"{flag} <b><code>ɴᴇᴇᴅ : {needed_amount:,.2f} 🪙</code></b>\n"
                 f"<code>━━━━━━━━━━━━━━━━━━</code>"
@@ -1382,34 +1382,34 @@ async def format_and_copy_text(message: types.Message):
     await message.reply(formatted_text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
 
 
-# 🌟 CONFIRM ခလုတ်ကို နှိပ်လျှင် အလုပ်လုပ်မည့် Handler အသစ်
-# ==========================================
 @main_router.callback_query(F.data == "CONFIRM_ORDER")
 async def process_confirm_order(call: types.CallbackQuery):
+    # 🌟 Button ပေါ်ရှိ Loading လည်နေခြင်းကို ချက်ချင်းရပ်တန့်စေမည် 🌟
+    await call.answer()
+    
     bot_id = call.bot.id
     if not await is_authorized(bot_id, call.from_user.id):
-        return await call.answer("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.", show_alert=True)
+        return await call.message.answer("❌ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
         
     original_msg = call.message.reply_to_message
     
-    # 1. <code> Tag ထဲမှ Formatted Text ကို တိကျစွာ ဆွဲထုတ်မည်
     msg_html = call.message.html_text
     match = re.search(r"<code>(.*?)</code>", msg_html)
     if not match:
-        return await call.answer("❌ Could not extract order text.", show_alert=True)
+        return await call.message.answer("❌ Could not extract order text.")
         
     order_text = html.unescape(match.group(1).strip())
     
-    # 2. Confirm နှိပ်ပြီးသည်နှင့် အဆိုပါ Message ကို ချက်ချင်း ဖျက်ပစ်မည်
+    # Message အား ဖျက်ပစ်မည်
     try:
         await call.message.delete()
     except Exception:
         pass
         
     if not original_msg:
-        return await call.answer("❌ မူရင်း Message ကို ရှာမတွေ့ပါ။ Manual Copy ကူး၍ ဝယ်ယူပါ။", show_alert=True)
+        return await call.message.answer("❌ မူရင်း Message ကို ရှာမတွေ့ပါ။ Manual Copy ကူး၍ ဝယ်ယူပါ။")
 
-    # 3. Order Text ကို စစ်ဆေး၍ သက်ဆိုင်ရာ Region သို့ Auto ပို့ပေးမည်
+    # Order Text ကို စစ်ဆေး၍ သက်ဆိုင်ရာ Region သို့ Auto ပို့ပေးမည်
     lines = [line.strip() for line in order_text.strip().split('\n') if line.strip()]
     lower_order = order_text.lower()
     
@@ -1430,8 +1430,8 @@ async def process_confirm_order(call: types.CallbackQuery):
         await execute_buy_process(bot_id, original_msg, lines, regex, 'PH', PH_PACKAGES, process_smile_one_order_ph, "MLBB")
         
     else:
-        # Package မပါဘဲ ID/Zone သီးသန့် ရိုက်ထည့်ထားလျှင် (ဝယ်ယူ၍ မရနိုင်ပါ)
-        await call.answer("⚠️ Item Package မပါဝင်ပါ။", show_alert=True)
+        await call.message.answer(" Item Package မပါဝင်ပါ။")
+
 
 
 
@@ -2654,11 +2654,15 @@ async def start_cloned_bot_polling(clone_bot: Bot):
         print(f"✅ Started custom polling for Cloned Bot: @{bot_info.username} (ID: {bot_info.id})")
         
         await clone_bot.delete_webhook(drop_pending_updates=True)
+        
+        # 🌟 Telegram ဆီမှ Button Click (Callback) များပါ ယူရန် သတ်မှတ်ခြင်း 🌟
+        allowed_updates = main_dp.resolve_used_update_types()
 
         offset = None
         while True:
             try:
-                updates = await clone_bot.get_updates(offset=offset, timeout=20)
+                # allowed_updates=allowed_updates ကို get_updates တွင် ထည့်သွင်းပေးလိုက်ပါသည်
+                updates = await clone_bot.get_updates(offset=offset, timeout=20, allowed_updates=allowed_updates)
                 for update in updates:
                     offset = update.update_id + 1
                     asyncio.create_task(main_dp.feed_update(clone_bot, update))
@@ -2668,6 +2672,7 @@ async def start_cloned_bot_polling(clone_bot: Bot):
                 
     except Exception as e:
         print(f"❌ Could not start polling for cloned bot: {e}")
+
 
 async def main():
     print("Starting Heartbeat & Clone Management tasks...")
