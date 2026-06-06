@@ -53,18 +53,7 @@ CLONE_BOT_FEE_PERCENT = 0.05
 BR_EMOJI = "5228878788867142213"   
 PH_EMOJI = "5231361434583049965"
 
-WEBSHARE_PROXIES = [
-    "http://qduuujrj:bf1ttoecf2d5@31.59.20.176:6754",
-    "http://qduuujrj:bf1ttoecf2d5@23.95.150.145:6114",
-    "http://qduuujrj:bf1ttoecf2d5@198.23.239.134:6540",
-    "http://qduuujrj:bf1ttoecf2d5@45.38.107.97:6014",
-    "http://qduuujrj:bf1ttoecf2d5@107.172.163.27:6543",
-    "http://qduuujrj:bf1ttoecf2d5@198.105.121.200:6462",
-    "http://qduuujrj:bf1ttoecf2d5@216.10.27.159:6837",
-    "http://qduuujrj:bf1ttoecf2d5@142.111.67.146:5611",
-    "http://qduuujrj:bf1ttoecf2d5@191.96.254.138:6185",
-    "http://qduuujrj:bf1ttoecf2d5@31.58.9.4:6077"
-]
+
 
 last_login_time = 0
 
@@ -213,11 +202,7 @@ async def notify_owner(text: str):
     except Exception as e: 
         print(f" Owner ထံသို့ Message ပို့၍မရပါ: {e}")
 
-def get_random_proxy():
-    if WEBSHARE_PROXIES:
-        proxy_url = random.choice(WEBSHARE_PROXIES)
-        return {"http": proxy_url, "https": proxy_url}
-    return None
+
 
 def generate_list(packages_dict):
     """Dictionary ထဲမှ Package များနှင့် ဈေးနှုန်းများကို သပ်ရပ်စွာ စာရင်းထုတ်ပေးရန်"""
@@ -250,12 +235,11 @@ async def get_bot_scraper(bot_id: int):
                     k, v = item.strip().split('=', 1)
                     cookie_dict[k.strip()] = v.strip()
                     
-        proxy_dict = get_random_proxy()
-        
+        # ❌ Proxy များကို ဖြုတ်ချလိုက်ပါပြီ
         GLOBAL_SCRAPERS[bot_id] = AsyncSession(
             impersonate="chrome124", 
-            cookies=cookie_dict,
-            proxies=proxy_dict
+            cookies=cookie_dict
+            # proxies=proxy_dict ကို ဖယ်ရှားလိုက်ပါသည်
         )
         GLOBAL_COOKIES[bot_id] = raw_cookie
         GLOBAL_CSRF[bot_id] = {'mlbb_br': None, 'mlbb_ph': None, 'mcc_br': None, 'mcc_ph': None}
@@ -1657,8 +1641,8 @@ async def handle_check_region(message: types.Message):
     payload = {'uid': game_id, 'server': zone_id}
     headers = {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15', 'Accept': 'application/json'}
     try:
-        proxy_dict = get_random_proxy()
-        async with AsyncSession(impersonate="chrome124", proxies=proxy_dict) as local_scraper:
+        # Proxy မသုံးတော့ဘဲ တိုက်ရိုက် Request လှမ်းပါမည်
+        async with AsyncSession(impersonate="chrome124") as local_scraper:
             res = await local_scraper.post(api_url, data=payload, headers=headers, timeout=15)
         try: data = res.json()
         except Exception: return await loading_msg.edit_text(f"❌ API Error: Invalid Response.\n\n<code>{res.text[:100]}...</code>")
