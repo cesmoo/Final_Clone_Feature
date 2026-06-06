@@ -1212,9 +1212,6 @@ async def handle_topup_br(message: types.Message):
             check_res = check_res_raw.json()
             code_status = str(check_res.get('code', check_res.get('status', '')))
             
-            # Smile.one ဘက်မှ ပြန်လာသော အမှားစာသားကို ဖမ်းယူခြင်း
-            api_msg = str(check_res.get('msg') or check_res.get('message') or "Unknown Error")
-            
             card_amount = 0.0
             try:
                 if 'data' in check_res and isinstance(check_res['data'], dict):
@@ -1222,70 +1219,72 @@ async def handle_topup_br(message: types.Message):
                     if val: card_amount = float(val)
             except: pass
 
-            # --- Server မှ ပြန်လာသော စာသားကိုသာ တိုက်ရိုက်ပြသပေးမည် ---
-            if code_status in ['201', '202'] or 'fail' in api_msg.lower():
+            # --- API တွင် msg မပါဝင်သောကြောင့် Hardcode ပြန်ရေးပါမည် ---
+            if code_status == '201':
+                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nPlease enter the correct product code.")
+            elif code_status == '202':
+                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nThis code has already been used. Please use another code.")
+            elif code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
+                api_msg = str(check_res.get('msg') or check_res.get('message') or f"Error Code: {code_status}")
                 return await loading_msg.edit_text(f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{api_msg}")
 
             # --- Success ဖြစ်မှသာ ငွေဆက်ဖြည့်ရန် ---
-            elif code_status in ['200', '0', '1'] or 'success' in api_msg.lower():
-                old_bal = await get_smile_balance(scraper, headers, balance_check_url)
-                pay_res_raw = await scraper.post(pay_url, data={'_csrf': csrf_token, 'sec': activation_code}, headers=ajax_headers)
-                pay_res = pay_res_raw.json()
-                pay_status = str(pay_res.get('code', pay_res.get('status', '')))
+            old_bal = await get_smile_balance(scraper, headers, balance_check_url)
+            pay_res_raw = await scraper.post(pay_url, data={'_csrf': csrf_token, 'sec': activation_code}, headers=ajax_headers)
+            pay_res = pay_res_raw.json()
+            pay_status = str(pay_res.get('code', pay_res.get('status', '')))
+            
+            if pay_status in ['200', '0', '1'] or 'success' in str(pay_res.get('msg', '')).lower():
+                await asyncio.sleep(5) 
+                anti_cache_url = f"{balance_check_url}?_t={int(time.time())}"
+                new_bal = await get_smile_balance(scraper, headers, anti_cache_url)
+                added_amount = round(new_bal['br_balance'] - old_bal['br_balance'], 2)
                 
-                if pay_status in ['200', '0', '1'] or 'success' in str(pay_res.get('msg', '')).lower():
-                    await asyncio.sleep(5) 
-                    anti_cache_url = f"{balance_check_url}?_t={int(time.time())}"
-                    new_bal = await get_smile_balance(scraper, headers, anti_cache_url)
-                    added_amount = round(new_bal['br_balance'] - old_bal['br_balance'], 2)
+                if added_amount <= 0 and card_amount > 0: added_amount = card_amount
                     
-                    if added_amount <= 0 and card_amount > 0: added_amount = card_amount
+                if added_amount <= 0:
+                    await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss ✅\n(Cannot retrieve exact amount due to System Delay.)")
+                else:
+                    flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>"
+                    if bot_id != bot.id:
+                        fee_amount = added_amount * CLONE_BOT_FEE_PERCENT
+                        v_added = added_amount - fee_amount
+                        await db.update_clone_wallet(bot_id, 'BR', v_added)
+                        v_wallet = await db.get_clone_wallet(bot_id)
                         
-                    if added_amount <= 0:
-                        await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss ✅\n(Cannot retrieve exact amount due to System Delay.)")
+                        fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
+                        v_added_fmt = int(v_added) if v_added % 1 == 0 else v_added
+                        fee_fmt = int(fee_amount) if fee_amount % 1 == 0 else fee_amount
+                        
+                        msg = (
+                            f"✅ <b>Code Top-Up Successful</b>\n\n"
+                            f"<code>Code   : {activation_code} (BR)\n"
+                            f"Amount : {fmt_amount:,}\n"
+                            f"Fee ({int(CLONE_BOT_FEE_PERCENT*100)}%) : -{fee_fmt:,}\n"
+                            f"V-Added: +{v_added_fmt:,} 🪙</code>\n"
+                            f"{flag} <code>V-Wallet : {v_wallet.get('br_balance', 0.0):,.2f} 🪙</code>"
+                        )
                     else:
-                        flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>"
-                        if bot_id != bot.id:
-                            fee_amount = added_amount * CLONE_BOT_FEE_PERCENT
-                            v_added = added_amount - fee_amount
-                            await db.update_clone_wallet(bot_id, 'BR', v_added)
-                            v_wallet = await db.get_clone_wallet(bot_id)
-                            
-                            fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
-                            v_added_fmt = int(v_added) if v_added % 1 == 0 else v_added
-                            fee_fmt = int(fee_amount) if fee_amount % 1 == 0 else fee_amount
-                            
-                            msg = (
-                                f"✅ <b>Code Top-Up Successful</b>\n\n"
-                                f"<code>Code   : {activation_code} (BR)\n"
-                                f"Amount : {fmt_amount:,}\n"
-                                f"Fee ({int(CLONE_BOT_FEE_PERCENT*100)}%) : -{fee_fmt:,}\n"
-                                f"V-Added: +{v_added_fmt:,} 🪙</code>\n"
-                                f"{flag} <code>V-Wallet : {v_wallet.get('br_balance', 0.0):,.2f} 🪙</code>"
-                            )
-                        else:
-                            fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
-                            assets = new_bal.get('br_balance', 0.0)
-                            msg = (
-                                f"✅ <b>Code Top-Up Successful</b>\n\n"
-                                f"<code>Code   : {activation_code} (BR)\n"
-                                f"Amount : {fmt_amount:,}\n"
-                                f"Added  : +{added_amount:,.1f} 🪙</code>\n"
-                                f"{flag} <code>Total  : {assets:,.1f} 🪙</code>"
-                            )
-                        await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
-                else: 
-                    pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
-                    await loading_msg.edit_text(f"❌ {pay_error_msg}")
+                        fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
+                        assets = new_bal.get('br_balance', 0.0)
+                        msg = (
+                            f"✅ <b>Code Top-Up Successful</b>\n\n"
+                            f"<code>Code   : {activation_code} (BR)\n"
+                            f"Amount : {fmt_amount:,}\n"
+                            f"Added  : +{added_amount:,.1f} 🪙</code>\n"
+                            f"{flag} <code>Total  : {assets:,.1f} 🪙</code>"
+                        )
+                    await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             else: 
-                await loading_msg.edit_text(f"Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ❌\n{api_msg}")
+                pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
+                await loading_msg.edit_text(f"❌ {pay_error_msg}")
         except Exception as e: await loading_msg.edit_text(f"❌ Error: {str(e)}")
 
 
 @main_router.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+p\s*$"))
 async def handle_topup_ph(message: types.Message):
     bot_id = message.bot.id
-    if not await is_authorized(bot_id, message.from_user.id): return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+    if not await is_authorized(bot_id, message.from_user.id): return await message.reply("ɴᴏᴛ ᴀᴜ্থᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
     match = re.search(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+p\s*$", message.text.strip())
     activation_code = match.group(1).strip()
     tg_id = str(message.from_user.id)
@@ -1324,9 +1323,6 @@ async def handle_topup_ph(message: types.Message):
             check_res = check_res_raw.json()
             code_status = str(check_res.get('code', check_res.get('status', '')))
             
-            # Smile.one ဘက်မှ ပြန်လာသော အမှားစာသားကို ဖမ်းယူခြင်း
-            api_msg = str(check_res.get('msg') or check_res.get('message') or "Unknown Error")
-            
             card_amount = 0.0
             try:
                 if 'data' in check_res and isinstance(check_res['data'], dict):
@@ -1334,63 +1330,65 @@ async def handle_topup_ph(message: types.Message):
                     if val: card_amount = float(val)
             except: pass
 
-            # --- Server မှ ပြန်လာသော စာသားကိုသာ တိုက်ရိုက်ပြသပေးမည် ---
-            if code_status in ['201', '202'] or 'fail' in api_msg.lower():
+            # --- API တွင် msg မပါဝင်သောကြောင့် Hardcode ပြန်ရေးပါမည် ---
+            if code_status == '201':
+                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nPlease enter the correct product code.")
+            elif code_status == '202':
+                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nThis code has already been used. Please use another code.")
+            elif code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
+                api_msg = str(check_res.get('msg') or check_res.get('message') or f"Error Code: {code_status}")
                 return await loading_msg.edit_text(f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{api_msg}")
 
             # --- Success ဖြစ်မှသာ ငွေဆက်ဖြည့်ရန် ---
-            elif code_status in ['200', '0', '1'] or 'success' in api_msg.lower():
-                old_bal = await get_smile_balance(scraper, headers, balance_check_url)
-                pay_res_raw = await scraper.post(pay_url, data={'_csrf': csrf_token, 'sec': activation_code}, headers=ajax_headers)
-                pay_res = pay_res_raw.json()
-                pay_status = str(pay_res.get('code', pay_res.get('status', '')))
+            old_bal = await get_smile_balance(scraper, headers, balance_check_url)
+            pay_res_raw = await scraper.post(pay_url, data={'_csrf': csrf_token, 'sec': activation_code}, headers=ajax_headers)
+            pay_res = pay_res_raw.json()
+            pay_status = str(pay_res.get('code', pay_res.get('status', '')))
+            
+            if pay_status in ['200', '0', '1'] or 'success' in str(pay_res.get('msg', '')).lower():
+                await asyncio.sleep(5) 
+                anti_cache_url = f"{balance_check_url}?_t={int(time.time())}"
+                new_bal = await get_smile_balance(scraper, headers, anti_cache_url)
+                added_amount = round(new_bal['ph_balance'] - old_bal['ph_balance'], 2)
                 
-                if pay_status in ['200', '0', '1'] or 'success' in str(pay_res.get('msg', '')).lower():
-                    await asyncio.sleep(5) 
-                    anti_cache_url = f"{balance_check_url}?_t={int(time.time())}"
-                    new_bal = await get_smile_balance(scraper, headers, anti_cache_url)
-                    added_amount = round(new_bal['ph_balance'] - old_bal['ph_balance'], 2)
+                if added_amount <= 0 and card_amount > 0: added_amount = card_amount
                     
-                    if added_amount <= 0 and card_amount > 0: added_amount = card_amount
+                if added_amount <= 0:
+                    await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss ✅\n(Cannot retrieve exact amount due to System Delay.)")
+                else:
+                    flag = f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
+                    if bot_id != bot.id:
+                        fee_amount = added_amount * CLONE_BOT_FEE_PERCENT
+                        v_added = added_amount - fee_amount
+                        await db.update_clone_wallet(bot_id, 'PH', v_added)
+                        v_wallet = await db.get_clone_wallet(bot_id)
                         
-                    if added_amount <= 0:
-                        await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss ✅\n(Cannot retrieve exact amount due to System Delay.)")
+                        fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
+                        v_added_fmt = int(v_added) if v_added % 1 == 0 else v_added
+                        fee_fmt = int(fee_amount) if fee_amount % 1 == 0 else fee_amount
+                        
+                        msg = (
+                            f"✅ <b>Code Top-Up Successful</b>\n\n"
+                            f"<code>Code   : {activation_code} (PH)\n"
+                            f"Amount : {fmt_amount:,}\n"
+                            f"Fee ({int(CLONE_BOT_FEE_PERCENT*100)}%) : -{fee_fmt:,}\n"
+                            f"V-Added: +{v_added_fmt:,} 🪙</code>\n"
+                            f"{flag} <code>V-Wallet : {v_wallet.get('ph_balance', 0.0):,.2f} 🪙</code>"
+                        )
                     else:
-                        flag = f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
-                        if bot_id != bot.id:
-                            fee_amount = added_amount * CLONE_BOT_FEE_PERCENT
-                            v_added = added_amount - fee_amount
-                            await db.update_clone_wallet(bot_id, 'PH', v_added)
-                            v_wallet = await db.get_clone_wallet(bot_id)
-                            
-                            fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
-                            v_added_fmt = int(v_added) if v_added % 1 == 0 else v_added
-                            fee_fmt = int(fee_amount) if fee_amount % 1 == 0 else fee_amount
-                            
-                            msg = (
-                                f"✅ <b>Code Top-Up Successful</b>\n\n"
-                                f"<code>Code   : {activation_code} (PH)\n"
-                                f"Amount : {fmt_amount:,}\n"
-                                f"Fee ({int(CLONE_BOT_FEE_PERCENT*100)}%) : -{fee_fmt:,}\n"
-                                f"V-Added: +{v_added_fmt:,} 🪙</code>\n"
-                                f"{flag} <code>V-Wallet : {v_wallet.get('ph_balance', 0.0):,.2f} 🪙</code>"
-                            )
-                        else:
-                            fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
-                            assets = new_bal.get('ph_balance', 0.0)
-                            msg = (
-                                f"✅ <b>Code Top-Up Successful</b>\n\n"
-                                f"<code>Code   : {activation_code} (PH)\n"
-                                f"Amount : {fmt_amount:,}\n"
-                                f"Added  : +{added_amount:,.1f} 🪙</code>\n"
-                                f"{flag} <code>Total  : {assets:,.1f} 🪙</code>"
-                            )
-                        await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
-                else: 
-                    pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
-                    await loading_msg.edit_text(f"❌ {pay_error_msg}")
+                        fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
+                        assets = new_bal.get('ph_balance', 0.0)
+                        msg = (
+                            f"✅ <b>Code Top-Up Successful</b>\n\n"
+                            f"<code>Code   : {activation_code} (PH)\n"
+                            f"Amount : {fmt_amount:,}\n"
+                            f"Added  : +{added_amount:,.1f} 🪙</code>\n"
+                            f"{flag} <code>Total  : {assets:,.1f} 🪙</code>"
+                        )
+                    await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             else: 
-                await loading_msg.edit_text(f"Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ❌\n{api_msg}")
+                pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
+                await loading_msg.edit_text(f"❌ {pay_error_msg}")
         except Exception as e: await loading_msg.edit_text(f"❌ Error: {str(e)}")
 
 @main_router.message(or_f(Command("add"), F.text.regexp(r"(?i)^\.add(?:$|\s+)")))
