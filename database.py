@@ -48,7 +48,7 @@ async def setup_indexes():
 
 
 async def init_owner(owner_id):
-    # Owner ကို Hardcode ဖြင့် is_authorized တွင် စစ်ဆေးမည်ဖြစ်၍ ဤနေရာတွင် လွတ်ထားနိုင်ပါသည်။
+    # Owner ကို is_authorized တွင် အလိုအလျောက် ခွင့်ပြုထားပြီးဖြစ်၍ လွတ်ထားနိုင်ပါသည်
     pass
 
 
@@ -67,17 +67,17 @@ async def update_bot_cookie(bot_id: int, cookie_str: str):
 
 
 # ====== Clone Bot Methods ======
-async def add_cloned_bot(token: str):
+async def add_cloned_bot(token: str, bot_id: int):
     await settings_col.update_one(
         {"type": "cloned_bot", "token": token},
-        {"$set": {"token": token}},
+        {"$set": {"token": token, "bot_id": bot_id}},
         upsert=True
     )
 
 
 async def get_all_cloned_bots():
     cursor = settings_col.find({"type": "cloned_bot"})
-    return [doc["token"] async for doc in cursor]
+    return [doc async for doc in cursor]
 
 
 async def remove_cloned_bot(token: str):
@@ -85,7 +85,25 @@ async def remove_cloned_bot(token: str):
     return result.deleted_count > 0
 
 
-# ====== Authorized Users Methods ======
+# ====== Clone Bot Wallet Methods (အသစ်) ======
+async def get_clone_wallet(bot_id: int):
+    doc = await settings_col.find_one({"type": "cloned_bot", "bot_id": bot_id})
+    return {
+        "br_balance": doc.get("br_balance", 0.0) if doc else 0.0,
+        "ph_balance": doc.get("ph_balance", 0.0) if doc else 0.0
+    }
+
+
+async def update_clone_wallet(bot_id: int, currency: str, amount: float):
+    field = "br_balance" if currency.upper() == "BR" else "ph_balance"
+    await settings_col.update_one(
+        {"type": "cloned_bot", "bot_id": bot_id},
+        {"$inc": {field: amount}},
+        upsert=True
+    )
+
+
+# ====== Authorized Users Methods (Bot ID ဖြင့်) ======
 async def get_reseller(bot_id: int, tg_id: str):
     return await resellers_col.find_one({"bot_id": bot_id, "tg_id": str(tg_id)})
 
@@ -154,44 +172,9 @@ async def clear_user_history(tg_id):
     return result.deleted_count
 
 
-async def get_top_customers(limit=10):
-    pipeline = [
-        {"$match": {"status": "success"}},
-        {"$group": {
-            "_id": "$tg_id",
-            "total_spent": {"$sum": "$price"},
-            "order_count": {"$sum": 1}
-        }},
-        {"$sort": {"total_spent": -1}},
-        {"$limit": limit}
-    ]
-    cursor = orders_col.aggregate(pipeline)
-    return await cursor.to_list(length=limit)
-
-
-async def get_today_orders_summary():
-    now = datetime.datetime.now(MMT)
-    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    pipeline = [
-        {"$match": {"status": "success", "timestamp": {"$gte": start_of_day}}},
-        {"$group": {
-            "_id": None,
-            "total_spent": {"$sum": "$price"},
-            "total_orders": {"$sum": 1}
-        }}
-    ]
-    cursor = orders_col.aggregate(pipeline)
-    result = await cursor.to_list(length=1)
-    
-    if result:
-        return result[0]
-    return {"total_spent": 0.0, "total_orders": 0}
-
-
 # ====== Scammers Methods ======
 async def add_scammer(game_id: str):
-    await db.scammers.update_one(
+    await scammers_col.update_one(
         {"game_id": game_id}, 
         {"$set": {"game_id": game_id}}, 
         upsert=True
@@ -200,10 +183,10 @@ async def add_scammer(game_id: str):
 
 
 async def remove_scammer(game_id: str):
-    result = await db.scammers.delete_one({"game_id": game_id})
+    result = await scammers_col.delete_one({"game_id": game_id})
     return result.deleted_count > 0
 
 
 async def get_all_scammers():
-    cursor = db.scammers.find({})
+    cursor = scammers_col.find({})
     return [doc["game_id"] async for doc in cursor]
