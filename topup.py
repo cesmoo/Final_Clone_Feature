@@ -1318,8 +1318,13 @@ async def handle_topup_ph(message: types.Message):
                     val = check_res['data'].get('amount', check_res['data'].get('money', 0))
                     if val: card_amount = float(val)
             except: pass
+            
+            if code_status == '201':
+                return await loading_msg.edit_text("Please enter the correct product code.")
+            elif code_status == '202':
+                return await loading_msg.edit_text("This code has already been used. Please use another code.")
 
-            if code_status in ['200', '201', '0', '1'] or 'success' in str(check_res.get('msg', '')).lower():
+            if code_status in ['200', '0', '1'] or 'success' in str(check_res.get('msg', '')).lower():
                 old_bal = await get_smile_balance(scraper, headers, balance_check_url)
                 pay_res_raw = await scraper.post(pay_url, data={'_csrf': csrf_token, 'sec': activation_code}, headers=ajax_headers)
                 pay_res = pay_res_raw.json()
