@@ -48,7 +48,7 @@ api_semaphore = asyncio.Semaphore(10)
 auth_lock = asyncio.Lock()
 
 # Clone Bot များ Code ဖြည့်လျှင် ဖြတ်မည့် Fees ရာခိုင်နှုန်း (ဥပမာ 0.05 = 5%)
-CLONE_BOT_FEE_PERCENT = 0.05 
+#CLONE_BOT_FEE_PERCENT = 0.05 
 
 BR_EMOJI = "5228878788867142213"   
 PH_EMOJI = "5231361434583049965"
