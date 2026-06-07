@@ -1212,12 +1212,11 @@ async def handle_topup_br(message: types.Message):
             payload_data = {'_csrf': csrf_token, 'pin': activation_code, 'sec': activation_code}
             
             check_res_raw = await scraper.post(check_url, data=payload_data, headers=ajax_headers)
-            raw_text = check_res_raw.text  # Debug အတွက် Raw Text ကို သိမ်းထားပါမည်
             
             try:
                 check_res = check_res_raw.json()
             except Exception:
-                return await loading_msg.edit_text(f"❌ <b>API Parsing Error</b>\n<code>{raw_text[:200]}</code>")
+                return await loading_msg.edit_text(f"❌ <b>API Parsing Error</b>\nAPI မှ မှန်ကန်သော တုံ့ပြန်မှု မရရှိပါ။")
 
             code_status = str(check_res.get('code', check_res.get('status', '')))
             
@@ -1228,20 +1227,16 @@ async def handle_topup_br(message: types.Message):
                     if val: card_amount = float(val)
             except: pass
 
-            # === DEBUG စနစ်ဖြင့် အတိအကျထုတ်ပြမည့် အပိုင်း ===
+            # === DEBUG ဖျောက်ပြီး ပုံမှန်အတိုင်း ပြန်ပြမည့် အပိုင်း ===
             if code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
-                err_msg = ""
-                if code_status == '201': err_msg = "Please enter the correct product code."
-                elif code_status == '202': err_msg = "This code has already been used. Please use another code."
-                else: err_msg = str(check_res.get('msg') or "Unknown Error")
+                if code_status == '201': 
+                    err_msg = "ᴘʟᴇᴀꜱᴇ ᴇɴᴛᴇʀ ᴛʜᴇ ᴄᴏʀʀᴇᴄᴛ ᴘʀᴏᴅᴜᴄᴛ ᴄᴏᴅᴇ."
+                elif code_status == '202': 
+                    err_msg = "ᴛʜɪꜱ ᴄᴏᴅᴇ ʜᴀꜱ ᴀʟʀᴇᴀᴅʏ ʙᴇᴇɴ ᴜꜱᴇᴅ."
+                else: 
+                    err_msg = str(check_res.get('msg') or "Unknown Error")
                 
-                debug_info = (
-                    f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{err_msg}\n\n"
-                    f"🛠 <b>[ DEBUG INFO ]</b>\n"
-                    f"• Code: <code>{code_status}</code>\n"
-                    f"• Raw JSON: <code>{raw_text}</code>"
-                )
-                return await loading_msg.edit_text(debug_info)
+                return await loading_msg.edit_text(f"{err_msg}")
 
             # --- Success ဖြစ်မှသာ ငွေဆက်ဖြည့်ရန် ---
             old_bal = await get_smile_balance(scraper, headers, balance_check_url)
@@ -1258,11 +1253,20 @@ async def handle_topup_br(message: types.Message):
                 if added_amount <= 0 and card_amount > 0: added_amount = card_amount
                     
                 if added_amount <= 0:
-                    await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss ✅\n(Cannot retrieve exact amount due to System Delay.)")
+                    await loading_msg.edit_text(f"sᴍɪʟᴇ ᴏɴᴇ ʀᴇᴅᴇᴇᴍ ᴄᴏᴅᴇ sᴜᴄᴄᴇss")
                 else:
                     flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>"
                     if bot_id != bot.id:
-                        fee_amount = added_amount * CLONE_BOT_FEE_PERCENT
+                        # --- BR အတွက် Dynamic Fee သတ်မှတ်ခြင်း ---
+                        fee_rate = 0.003  # ပုံမှန် 300 သို့မဟုတ် အောက်ဆိုလျှင် 0.04 
+                        if added_amount >= 10000:
+                            fee_rate = 0.002
+                        elif added_amount >= 5000:
+                            fee_rate = 0.002
+                        elif added_amount >= 1000:
+                            fee_rate = 0.002
+                            
+                        fee_amount = added_amount * fee_rate
                         v_added = added_amount - fee_amount
                         await db.update_clone_wallet(bot_id, 'BR', v_added)
                         v_wallet = await db.get_clone_wallet(bot_id)
@@ -1275,9 +1279,9 @@ async def handle_topup_br(message: types.Message):
                             f"✅ <b>Code Top-Up Successful</b>\n\n"
                             f"<code>Code   : {activation_code} (BR)\n"
                             f"Amount : {fmt_amount:,}\n"
-                            f"Fee ({int(CLONE_BOT_FEE_PERCENT*100)}%) : -{fee_fmt:,}\n"
-                            f"V-Added: +{v_added_fmt:,} 🪙</code>\n"
-                            f"{flag} <code>V-Wallet : {v_wallet.get('br_balance', 0.0):,.2f} 🪙</code>"
+                            f"Fee ({fee_rate*100:g}%) : -{fee_fmt:,}\n"
+                            f"Added: +{v_added_fmt:,} 🪙</code>\n"
+                            f"{flag} <code>Wallet : {v_wallet.get('br_balance', 0.0):,.2f} 🪙</code>"
                         )
                     else:
                         fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
@@ -1292,7 +1296,7 @@ async def handle_topup_br(message: types.Message):
                     await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             else: 
                 pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
-                await loading_msg.edit_text(f"❌ {pay_error_msg}\n\n🛠 Debug Pay Code: <code>{pay_status}</code>")
+                await loading_msg.edit_text(f"❌ {pay_error_msg}")
         except Exception as e: await loading_msg.edit_text(f"❌ Error: {str(e)}")
 
 
@@ -1338,12 +1342,11 @@ async def handle_topup_ph(message: types.Message):
             payload_data = {'_csrf': csrf_token, 'pin': activation_code, 'sec': activation_code}
             
             check_res_raw = await scraper.post(check_url, data=payload_data, headers=ajax_headers)
-            raw_text = check_res_raw.text
             
             try:
                 check_res = check_res_raw.json()
             except Exception:
-                return await loading_msg.edit_text(f"❌ <b>API Parsing Error</b>\n<code>{raw_text[:200]}</code>")
+                return await loading_msg.edit_text(f"❌ <b>API Parsing Error</b>\nAPI မှ မှန်ကန်သော တုံ့ပြန်မှု မရရှိပါ။")
 
             code_status = str(check_res.get('code', check_res.get('status', '')))
             
@@ -1354,20 +1357,16 @@ async def handle_topup_ph(message: types.Message):
                     if val: card_amount = float(val)
             except: pass
 
-            # === DEBUG စနစ်ဖြင့် အတိအကျထုတ်ပြမည့် အပိုင်း ===
+            # === DEBUG ဖျောက်ပြီး ပုံမှန်အတိုင်း ပြန်ပြမည့် အပိုင်း ===
             if code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
-                err_msg = ""
-                if code_status == '201': err_msg = "Please enter the correct product code."
-                elif code_status == '202': err_msg = "This code has already been used. Please use another code."
-                else: err_msg = str(check_res.get('msg') or "Unknown Error")
+                if code_status == '201': 
+                    err_msg = "ᴘʟᴇᴀꜱᴇ ᴇɴᴛᴇʀ ᴛʜᴇ ᴄᴏʀʀᴇᴄᴛ ᴘʀᴏᴅᴜᴄᴛ ᴄᴏᴅᴇ."
+                elif code_status == '202': 
+                    err_msg = "ᴛʜɪꜱ ᴄᴏᴅᴇ ʜᴀꜱ ᴀʟʀᴇᴀᴅʏ ʙᴇᴇɴ ᴜꜱᴇᴅ.."
+                else: 
+                    err_msg = str(check_res.get('msg') or "Unknown Error")
                 
-                debug_info = (
-                    f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{err_msg}\n\n"
-                    f"🛠 <b>[ DEBUG INFO ]</b>\n"
-                    f"• Code: <code>{code_status}</code>\n"
-                    f"• Raw JSON: <code>{raw_text}</code>"
-                )
-                return await loading_msg.edit_text(debug_info)
+                return await loading_msg.edit_text(f"{err_msg}")
 
             # --- Success ဖြစ်မှသာ ငွေဆက်ဖြည့်ရန် ---
             old_bal = await get_smile_balance(scraper, headers, balance_check_url)
@@ -1388,7 +1387,16 @@ async def handle_topup_ph(message: types.Message):
                 else:
                     flag = f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
                     if bot_id != bot.id:
-                        fee_amount = added_amount * CLONE_BOT_FEE_PERCENT
+                        # --- PH အတွက် Dynamic Fee သတ်မှတ်ခြင်း ---
+                        fee_rate = 0.003  # ပုံမှန် 1120 သို့မဟုတ် အောက်ဆိုလျှင် 0.03 
+                        if added_amount >= 11200:
+                            fee_rate = 0.002
+                        elif added_amount >= 5600:
+                            fee_rate = 0.002
+                        elif added_amount >= 1120:
+                            fee_rate = 0.002
+                            
+                        fee_amount = added_amount * fee_rate
                         v_added = added_amount - fee_amount
                         await db.update_clone_wallet(bot_id, 'PH', v_added)
                         v_wallet = await db.get_clone_wallet(bot_id)
@@ -1401,9 +1409,9 @@ async def handle_topup_ph(message: types.Message):
                             f"✅ <b>Code Top-Up Successful</b>\n\n"
                             f"<code>Code   : {activation_code} (PH)\n"
                             f"Amount : {fmt_amount:,}\n"
-                            f"Fee ({int(CLONE_BOT_FEE_PERCENT*100)}%) : -{fee_fmt:,}\n"
-                            f"V-Added: +{v_added_fmt:,} 🪙</code>\n"
-                            f"{flag} <code>V-Wallet : {v_wallet.get('ph_balance', 0.0):,.2f} 🪙</code>"
+                            f"Fee ({fee_rate*100:g}%) : -{fee_fmt:,}\n"
+                            f"Added: +{v_added_fmt:,} 🪙</code>\n"
+                            f"{flag} <code>Wallet : {v_wallet.get('ph_balance', 0.0):,.2f} 🪙</code>"
                         )
                     else:
                         fmt_amount = int(added_amount) if added_amount % 1 == 0 else added_amount
@@ -1418,8 +1426,101 @@ async def handle_topup_ph(message: types.Message):
                     await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             else: 
                 pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
-                await loading_msg.edit_text(f"❌ {pay_error_msg}\n\n🛠 Debug Pay Code: <code>{pay_status}</code>")
+                await loading_msg.edit_text(f"❌ {pay_error_msg}")
         except Exception as e: await loading_msg.edit_text(f"❌ Error: {str(e)}")
+
+
+@main_router.message(or_f(Command("addbal"), F.text.regexp(r"(?i)^\.addbal(?:$|\s+)")))
+async def add_clone_balance(message: types.Message):
+    if message.from_user.id != OWNER_ID: 
+        return await message.reply("❌ You are not authorized.")
+        
+    bot_id = message.bot.id
+    if bot_id == bot.id:
+        return await message.reply("⚠️ <b>Main Bot သည် Official Balance ကိုသာ အသုံးပြုပါသည်။</b>\nClone Bot ၏ Wallet သို့ ငွေသွင်းလိုပါက သက်ဆိုင်ရာ Clone Bot တွင် သွားရောက်ရိုက်ထည့်ပါ။", parse_mode=ParseMode.HTML)
+
+    parts = message.text.strip().split()
+    if len(parts) < 2:
+        return await message.reply("⚠️ **Usage:** `.addbal <Amount> [BR/PH]`\nဥပမာ: `.addbal 500` သို့မဟုတ် `.addbal 500 PH`")
+    
+    try:
+        amount = float(parts[1])
+    except ValueError:
+        return await message.reply("❌ Invalid amount. ဂဏန်းသာ ရိုက်ထည့်ပါ။")
+    
+    currency = "BR"
+    if len(parts) >= 3:
+        currency = parts[2].upper()
+        if currency not in ['BR', 'PH']:
+            return await message.reply("❌ Invalid currency. 'BR' သို့မဟုတ် 'PH' သာ အသုံးပြုပါ။")
+    
+    # 🌟 သက်ဆိုင်ရာ Clone Bot ၏ Virtual Wallet ထဲသို့ တိုက်ရိုက် ပေါင်းထည့်မည်
+    await db.update_clone_wallet(bot_id, currency, amount)
+    
+    # Balance အသစ်ကို ပြန်ဆွဲထုတ်ပြမည်
+    v_wallet = await db.get_clone_wallet(bot_id)
+    new_br = v_wallet.get('br_balance', 0.0)
+    new_ph = v_wallet.get('ph_balance', 0.0)
+    
+    br_flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>"
+    ph_flag = f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
+    
+    await message.reply(
+        f"✅ <b>Wallet Updated!</b>\n\n"
+        f"💰 <b>Added:</b> <code>+{amount:,.2f} {currency}</code>\n\n"
+        f"📊 <b>Current Balance:</b>\n"
+        f"{br_flag} BR: <code>${new_br:,.2f}</code>\n"
+        f"{ph_flag} PH: <code>${new_ph:,.2f}</code>",
+        parse_mode=ParseMode.HTML
+    )
+
+
+@main_router.message(or_f(Command("deduct"), F.text.regexp(r"(?i)^\.deduct(?:$|\s+)")))
+async def deduct_clone_balance(message: types.Message):
+    if message.from_user.id != OWNER_ID: 
+        return await message.reply("❌ You are not authorized.")
+        
+    bot_id = message.bot.id
+    if bot_id == bot.id:
+        return await message.reply("⚠️ <b>Main Bot သည် Official Balance ကိုသာ အသုံးပြုပါသည်။</b>\nClone Bot ၏ Wallet ကို နှုတ်လိုပါက သက်ဆိုင်ရာ Clone Bot တွင် သွားရောက်ရိုက်ထည့်ပါ။", parse_mode=ParseMode.HTML)
+
+    parts = message.text.strip().split()
+    if len(parts) < 2:
+        return await message.reply("⚠️ **Usage:** `.deduct <Amount> [BR/PH]`\nဥပမာ: `.deduct 500` သို့မဟုတ် `.deduct 500 PH`")
+    
+    try:
+        amount = abs(float(parts[1]))
+    except ValueError:
+        return await message.reply("❌ Invalid amount. ဂဏန်းသာ ရိုက်ထည့်ပါ။")
+    
+    currency = "BR"
+    if len(parts) >= 3:
+        currency = parts[2].upper()
+        if currency not in ['BR', 'PH']:
+            return await message.reply("❌ Invalid currency. 'BR' သို့မဟုတ် 'PH' သာ အသုံးပြုပါ။")
+    
+    # 🌟 သက်ဆိုင်ရာ Clone Bot ၏ Virtual Wallet ထဲမှ တိုက်ရိုက် နှုတ်မည်
+    await db.update_clone_wallet(bot_id, currency, -amount)
+    
+    # Balance အသစ်ကို ပြန်ဆွဲထုတ်ပြမည်
+    v_wallet = await db.get_clone_wallet(bot_id)
+    new_br = v_wallet.get('br_balance', 0.0)
+    new_ph = v_wallet.get('ph_balance', 0.0)
+    
+    br_flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>"
+    ph_flag = f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
+    
+    await message.reply(
+        f"✅ <b>Wallet Deducted!</b>\n\n"
+        f"💸 <b>Deducted:</b> <code>-{amount:,.2f} {currency}</code>\n\n"
+        f"📊 <b>Current Balance:</b>\n"
+        f"{br_flag} BR: <code>${new_br:,.2f}</code>\n"
+        f"{ph_flag} PH: <code>${new_ph:,.2f}</code>",
+        parse_mode=ParseMode.HTML
+    )
+
+
+
 
 @main_router.message(or_f(Command("add"), F.text.regexp(r"(?i)^\.add(?:$|\s+)")))
 async def add_reseller(message: types.Message):
@@ -1519,7 +1620,7 @@ async def check_balance_command(message: types.Message):
     if bot_id != bot.id:
         v_wallet = await db.get_clone_wallet(bot_id)
         report = (
-            f"<blockquote><b>🤖 𝗩𝗜𝗥𝗧𝗨𝗔𝗟 𝗪𝗔𝗟𝗟𝗘𝗧 (𝗖𝗹𝗼𝗻𝗲)</b>\n\n"
+            f"<blockquote><b>𝗔𝗖𝗖𝗢𝗨𝗡𝗧 𝗕𝗔𝗟𝗔𝗡𝗖𝗘</b>\n\n"
             f"{br_flag} <code>𝗕𝗥 𝗕𝗔𝗟𝗔𝗡𝗖𝗘 : ${v_wallet.get('br_balance', 0.00):,.2f}</code>\n"
             f"{ph_flag} <code>𝗣𝗛 𝗕𝗔𝗟𝗔𝗡𝗖𝗘 : ${v_wallet.get('ph_balance', 0.00):,.2f}</code></blockquote>"
         )
@@ -1531,7 +1632,7 @@ async def check_balance_command(message: types.Message):
         anti_cache_url = f"https://www.smile.one/customer/order?_t={int(time.time())}"
         balances = await get_smile_balance(scraper, headers, anti_cache_url)
         report = (
-            f"<blockquote><b>𝗢𝗙𝗙𝗜𝗖𝗜𝗔𝗟 𝗔𝗖𝗖𝗢𝗨𝗡𝗧 𝗕𝗔𝗟𝗔𝗡𝗖𝗘</b>\n\n"
+            f"<blockquote><b>𝗔𝗖𝗖𝗢𝗨𝗡𝗧 𝗕𝗔𝗟𝗔𝗡𝗖𝗘</b>\n\n"
             f"{br_flag} <code>𝗕𝗥 𝗕𝗔𝗟𝗔𝗡𝗖𝗘 : ${balances.get('br_balance', 0.00):,.2f}</code>\n"
             f"{ph_flag} <code>𝗣𝗛 𝗕𝗔𝗟𝗔𝗡𝗖𝗘 : ${balances.get('ph_balance', 0.00):,.2f}</code></blockquote>"
         )
