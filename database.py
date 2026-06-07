@@ -140,6 +140,13 @@ async def set_vip_status(bot_id: int, tg_id: str, is_vip: bool):
     return result.modified_count > 0
 
 
+async def update_reseller_balance(bot_id: int, tg_id: str, br_amount: float = 0.0, ph_amount: float = 0.0):
+    await resellers_col.update_one(
+        {"bot_id": bot_id, "tg_id": str(tg_id)},
+        {"$inc": {"br_balance": br_amount, "ph_balance": ph_amount}}
+    )
+
+
 # ====== Orders Methods ======
 async def save_order(tg_id, game_id, zone_id, item_name, price, order_id, status="success"):
     now = datetime.datetime.now(MMT)
