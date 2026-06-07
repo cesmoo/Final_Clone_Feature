@@ -1208,8 +1208,17 @@ async def handle_topup_br(message: types.Message):
             ajax_headers = headers.copy()
             ajax_headers.update({'X-Requested-With': 'XMLHttpRequest', 'Origin': base_origin, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'})
 
-            check_res_raw = await scraper.post(check_url, data={'_csrf': csrf_token, 'pin': activation_code}, headers=ajax_headers)
-            check_res = check_res_raw.json()
+            # --- အမှားကင်းစေရန် pin ရော sec ပါ တွဲပို့ပေးပါမည် ---
+            payload_data = {'_csrf': csrf_token, 'pin': activation_code, 'sec': activation_code}
+            
+            check_res_raw = await scraper.post(check_url, data=payload_data, headers=ajax_headers)
+            raw_text = check_res_raw.text  # Debug အတွက် Raw Text ကို သိမ်းထားပါမည်
+            
+            try:
+                check_res = check_res_raw.json()
+            except Exception:
+                return await loading_msg.edit_text(f"❌ <b>API Parsing Error</b>\n<code>{raw_text[:200]}</code>")
+
             code_status = str(check_res.get('code', check_res.get('status', '')))
             
             card_amount = 0.0
@@ -1219,14 +1228,20 @@ async def handle_topup_br(message: types.Message):
                     if val: card_amount = float(val)
             except: pass
 
-            # --- API တွင် msg မပါဝင်သောကြောင့် Hardcode ပြန်ရေးပါမည် ---
-            if code_status == '201':
-                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nPlease enter the correct product code.")
-            elif code_status == '202':
-                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nThis code has already been used. Please use another code.")
-            elif code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
-                api_msg = str(check_res.get('msg') or check_res.get('message') or f"Error Code: {code_status}")
-                return await loading_msg.edit_text(f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{api_msg}")
+            # === DEBUG စနစ်ဖြင့် အတိအကျထုတ်ပြမည့် အပိုင်း ===
+            if code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
+                err_msg = ""
+                if code_status == '201': err_msg = "Please enter the correct product code."
+                elif code_status == '202': err_msg = "This code has already been used. Please use another code."
+                else: err_msg = str(check_res.get('msg') or "Unknown Error")
+                
+                debug_info = (
+                    f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{err_msg}\n\n"
+                    f"🛠 <b>[ DEBUG INFO ]</b>\n"
+                    f"• Code: <code>{code_status}</code>\n"
+                    f"• Raw JSON: <code>{raw_text}</code>"
+                )
+                return await loading_msg.edit_text(debug_info)
 
             # --- Success ဖြစ်မှသာ ငွေဆက်ဖြည့်ရန် ---
             old_bal = await get_smile_balance(scraper, headers, balance_check_url)
@@ -1277,14 +1292,14 @@ async def handle_topup_br(message: types.Message):
                     await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             else: 
                 pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
-                await loading_msg.edit_text(f"❌ {pay_error_msg}")
+                await loading_msg.edit_text(f"❌ {pay_error_msg}\n\n🛠 Debug Pay Code: <code>{pay_status}</code>")
         except Exception as e: await loading_msg.edit_text(f"❌ Error: {str(e)}")
 
 
 @main_router.message(F.text.regexp(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+p\s*$"))
 async def handle_topup_ph(message: types.Message):
     bot_id = message.bot.id
-    if not await is_authorized(bot_id, message.from_user.id): return await message.reply("ɴᴏᴛ ᴀᴜ্থᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
+    if not await is_authorized(bot_id, message.from_user.id): return await message.reply("ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀ.")
     match = re.search(r"(?i)^\.topup\s+([a-zA-Z0-9]+)\s+p\s*$", message.text.strip())
     activation_code = match.group(1).strip()
     tg_id = str(message.from_user.id)
@@ -1319,8 +1334,17 @@ async def handle_topup_ph(message: types.Message):
             ajax_headers = headers.copy()
             ajax_headers.update({'X-Requested-With': 'XMLHttpRequest', 'Origin': base_origin, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'})
 
-            check_res_raw = await scraper.post(check_url, data={'_csrf': csrf_token, 'pin': activation_code}, headers=ajax_headers)
-            check_res = check_res_raw.json()
+            # --- အမှားကင်းစေရန် pin ရော sec ပါ တွဲပို့ပေးပါမည် ---
+            payload_data = {'_csrf': csrf_token, 'pin': activation_code, 'sec': activation_code}
+            
+            check_res_raw = await scraper.post(check_url, data=payload_data, headers=ajax_headers)
+            raw_text = check_res_raw.text
+            
+            try:
+                check_res = check_res_raw.json()
+            except Exception:
+                return await loading_msg.edit_text(f"❌ <b>API Parsing Error</b>\n<code>{raw_text[:200]}</code>")
+
             code_status = str(check_res.get('code', check_res.get('status', '')))
             
             card_amount = 0.0
@@ -1330,14 +1354,20 @@ async def handle_topup_ph(message: types.Message):
                     if val: card_amount = float(val)
             except: pass
 
-            # --- API တွင် msg မပါဝင်သောကြောင့် Hardcode ပြန်ရေးပါမည် ---
-            if code_status == '201':
-                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nPlease enter the correct product code.")
-            elif code_status == '202':
-                return await loading_msg.edit_text("❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\nThis code has already been used. Please use another code.")
-            elif code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
-                api_msg = str(check_res.get('msg') or check_res.get('message') or f"Error Code: {code_status}")
-                return await loading_msg.edit_text(f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{api_msg}")
+            # === DEBUG စနစ်ဖြင့် အတိအကျထုတ်ပြမည့် အပိုင်း ===
+            if code_status not in ['200', '0', '1'] and 'success' not in str(check_res.get('msg', '')).lower():
+                err_msg = ""
+                if code_status == '201': err_msg = "Please enter the correct product code."
+                elif code_status == '202': err_msg = "This code has already been used. Please use another code."
+                else: err_msg = str(check_res.get('msg') or "Unknown Error")
+                
+                debug_info = (
+                    f"❌ <b>Cʜᴇᴄᴋ Fᴀɪʟᴇᴅ</b>\n{err_msg}\n\n"
+                    f"🛠 <b>[ DEBUG INFO ]</b>\n"
+                    f"• Code: <code>{code_status}</code>\n"
+                    f"• Raw JSON: <code>{raw_text}</code>"
+                )
+                return await loading_msg.edit_text(debug_info)
 
             # --- Success ဖြစ်မှသာ ငွေဆက်ဖြည့်ရန် ---
             old_bal = await get_smile_balance(scraper, headers, balance_check_url)
@@ -1388,7 +1418,7 @@ async def handle_topup_ph(message: types.Message):
                     await loading_msg.edit_text(msg, parse_mode=ParseMode.HTML)
             else: 
                 pay_error_msg = str(pay_res.get('msg') or "Payment failed during redemption.")
-                await loading_msg.edit_text(f"❌ {pay_error_msg}")
+                await loading_msg.edit_text(f"❌ {pay_error_msg}\n\n🛠 Debug Pay Code: <code>{pay_status}</code>")
         except Exception as e: await loading_msg.edit_text(f"❌ Error: {str(e)}")
 
 @main_router.message(or_f(Command("add"), F.text.regexp(r"(?i)^\.add(?:$|\s+)")))
