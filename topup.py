@@ -2108,6 +2108,11 @@ async def start_cloned_bot_polling(clone_bot: Bot):
                 await asyncio.sleep(5) 
     except Exception as e: print(f"❌ Could not start polling for cloned bot: {e}")
 
+async def health_check(request):
+    """Render Web Service Health Check အတွက် Dummy Response"""
+    from aiohttp import web
+    return web.Response(text="Bot is running successfully!")
+
 async def main():
     print("Starting Heartbeat & Clone Management tasks...")
     print("နှလုံးသားမပါရင် ဘယ်အရာမှတရားမဝင်")
@@ -2138,7 +2143,28 @@ async def main():
             print(f"❌ Failed to initialize cloned bot {token[:10]}... : {e}")
 
     print("Bot is successfully running on Aiogram 3 Framework... 🎉")
-    await main_dp.start_polling(bot)
+    
+    # 🌟 Bot Polling ကို Background Task အနေနဲ့ စတင်မယ်
+    bot_task = asyncio.create_task(main_dp.start_polling(bot))
+
+    # 🌟 Render Web Service အတွက် PORT ကို စစ်ဆေးမယ်
+    port = os.getenv("PORT")
+    if port:
+        from aiohttp import web
+        print(f"Starting web server on port {port} for Render Web Service health check...")
+        app = web.Application()
+        app.router.add_get('/', health_check)
+        app.router.add_get('/health', health_check)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', int(port))
+        await site.start()
+    else:
+        print("No PORT environment variable detected. Running as Background Worker.")
+
+    # 🌟 Bot Task ကို ဆက်လက် Run နေစေရန်
+    await bot_task
 
 if __name__ == '__main__':
     asyncio.run(main())
