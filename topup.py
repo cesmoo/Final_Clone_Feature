@@ -1258,13 +1258,13 @@ async def handle_topup_br(message: types.Message):
                     flag = f"<tg-emoji emoji-id='{BR_EMOJI}'>🇧🇷</tg-emoji>"
                     if bot_id != bot.id:
                         # --- BR အတွက် Dynamic Fee သတ်မှတ်ခြင်း ---
-                        fee_rate = 0.003  # ပုံမှန် 300 သို့မဟုတ် အောက်ဆိုလျှင် 0.04 
+                        fee_rate = 0.000  # ပုံမှန် 300 သို့မဟုတ် အောက်ဆိုလျှင် 0.04 
                         if added_amount >= 10000:
-                            fee_rate = 0.002
+                            fee_rate = 0.000
                         elif added_amount >= 5000:
-                            fee_rate = 0.002
+                            fee_rate = 0.000
                         elif added_amount >= 1000:
-                            fee_rate = 0.002
+                            fee_rate = 0.000
                             
                         fee_amount = added_amount * fee_rate
                         v_added = added_amount - fee_amount
@@ -1388,13 +1388,13 @@ async def handle_topup_ph(message: types.Message):
                     flag = f"<tg-emoji emoji-id='{PH_EMOJI}'>🇵🇭</tg-emoji>"
                     if bot_id != bot.id:
                         # --- PH အတွက် Dynamic Fee သတ်မှတ်ခြင်း ---
-                        fee_rate = 0.003  # ပုံမှန် 1120 သို့မဟုတ် အောက်ဆိုလျှင် 0.03 
+                        fee_rate = 0.000  # ပုံမှန် 1120 သို့မဟုတ် အောက်ဆိုလျှင် 0.03 
                         if added_amount >= 11200:
-                            fee_rate = 0.002
+                            fee_rate = 0.000
                         elif added_amount >= 5600:
-                            fee_rate = 0.002
+                            fee_rate = 0.000
                         elif added_amount >= 1120:
-                            fee_rate = 0.002
+                            fee_rate = 0.000
                             
                         fee_amount = added_amount * fee_rate
                         v_added = added_amount - fee_amount
